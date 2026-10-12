@@ -1,0 +1,23 @@
+# Ambientes virtuais e pacotes Python instalados
+.venv/
+venv/
+env/
+ENV/
+**/site-packages/
+__pycache__/
+*.py[cod]
+
+# Datasets baixados
+/data/
+/datasets/
+*.hea
+*.dat
+*.atr
+
+# Arquivos tabulares e resultados gerados
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.h5
+*.hdf5

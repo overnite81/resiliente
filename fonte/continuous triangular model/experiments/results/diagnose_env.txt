@@ -1,0 +1,73 @@
+machine=aarch64 (Linux-6.18.50+rpt-rpi-v8-aarch64-with-glibc2.41)
+python=3.13.5 em /home/altamir/repos/sistdin-refatorado/ferramentas/Ribeiro/continuous triangular model/.venv/bin/python
+Features	: fp asimd evtstrm crc32 cpuid
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x0
+CPU part	: 0xd08
+Features	: fp asimd evtstrm crc32 cpuid
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x0
+CPU part	: 0xd08
+Features	: fp asimd evtstrm crc32 cpuid
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x0
+CPU part	: 0xd08
+Features	: fp asimd evtstrm crc32 cpuid
+CPU implementer	: 0x41
+CPU architecture: 8
+CPU variant	: 0x0
+CPU part	: 0xd08
+Model		: Raspberry Pi 4 Model B Rev 1.4
+
+== numpy import ==
+2.5.4
+OK
+
+== numpy fft ==
+fft ok
+OK
+
+== scipy import ==
+1.18.1
+OK
+
+== scipy.signal.stft ==
+stft ok
+OK
+
+== pywt.cwt ==
+cwt ok
+OK
+
+== PIL resize ==
+pil ok
+OK
+
+== torch import ==
+FALHA: retorno 1
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import torch; print(torch.__version__)
+    ^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'torch'
+
+== torch forward ==
+FALHA: retorno 1
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import torch, torchvision; m = torchvision.models.resnet18(); m.eval(); m(torch.randn(1, 3, 96, 96)); print('forward ok')
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'torch'
+
+== resumo ==
+OK    numpy import
+OK    numpy fft
+OK    scipy import
+OK    scipy.signal.stft
+OK    pywt.cwt
+OK    PIL resize
+FALHA torch import
+FALHA torch forward

@@ -1,0 +1,4 @@
+# Install on the target VM using its ARM64-compatible Python/PyTorch wheels.
+# Keep this separate from requirements.txt so the existing SVM environment stays lean.
+torch>=2.2,<3
+torchvision>=0.17,<1
