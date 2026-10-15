@@ -119,6 +119,24 @@ python -m experiments.run_resnet_pilot \
 
 O log separa tempo de codificação das imagens, épocas e treino/inferência. `--weights imagenet` habilita inicialização pré-treinada (baixa os pesos na primeira execução); registre essa escolha e compare todas as representações com a mesma configuração. O conjunto de teste contém somente um registro, portanto as métricas do piloto são diagnósticas, não uma estimativa robusta de generalização.
 
+### Avaliação ResNet-18 com 5 folds
+
+Para comparar Wavelet + ResNet-18, STFT + ResNet-18 e CTM + ResNet-18, use o runner de validação cruzada. Por padrão, ele usa os 18 registros listados, 5 folds `StratifiedGroupKFold` agrupados por registro, até 64 exemplos por classe/registro e 20 épocas. Nenhum registro aparece simultaneamente no treino e na validação do mesmo fold. Para executar em Spot, prepare os dados antes e passe `--resume` após uma desalocação:
+
+```bash
+.venv/bin/python -m experiments.download_mitdb \
+  --records 100 101 103 105 106 108 109 111 112 113 115 116 118 119 121 122 123 124 \
+  --data-dir data/mitdb
+
+OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=2 \
+.venv/bin/python -m experiments.run_resnet_cv \
+  --data-dir data/mitdb --folds 5 --epochs 20 --threads 2 --seed 42
+```
+
+O runner grava métricas por fold em `experiments/results/resnet_cv5/resnet_cv5_folds.csv`, resumo em `resnet_cv5_summary.csv` e tempos em `resnet_cv5_timing.csv`. O resumo calcula média, desvio-padrão amostral e IC bilateral de 95% usando a distribuição t de Student (`n=5`, 4 graus de liberdade). Checkpoints atômicos de modelo/otimizador/estado aleatório são escritos ao fim de cada época; o CSV é atualizado ao fim de cada fold. Para retomar, mantenha exatamente os mesmos dados, parâmetros e seed e execute com `--resume`. Guarde resultados e checkpoints em armazenamento persistente da VM; os arquivos no disco efêmero não sobrevivem à desalocação.
+
+O IC entre folds é uma descrição da variação observada, não um intervalo inferencial perfeito: os conjuntos de treino dos folds se sobrepõem e, portanto, as métricas não são independentes. O protocolo também usa um split de 5 folds e uma seed; para inferência mais sólida, repita com outras seeds ou valide em registros externos. Pesos são aleatórios por padrão (`--weights none`); se usar `imagenet`, use a mesma opção para as três representações e registre isso.
+
 ### Perfil longo para Azure Spot ARM64
 
 Foi adicionado o perfil `spot-arm64-long`: 18 registros MIT-BIH (com 105 como teste), limite de 64 exemplos por classe/registro e 12 épocas por representação. Isso aumenta o conjunto de treino e o tempo computacional em relação ao piloto de 2 épocas. Execute na VM Spot ARM64, idealmente com os arquivos WFDB já no disco, para não gastar a janela de uptime com download:
