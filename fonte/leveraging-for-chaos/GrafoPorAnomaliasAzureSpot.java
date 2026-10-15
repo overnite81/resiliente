@@ -30,11 +30,12 @@ public class GrafoPorAnomaliasAzureSpot {
     private static final String EVENT_URL =
         "http://169.254.169.254/metadata/scheduledevents?api-version=2020-07-01";
     private static final long DEFAULT_POLL_MS = 5_000L;
-    private static final long CHECKPOINT_EVERY = 32L;
+    private static final long CHECKPOINT_INTERVAL_NANOS = Duration.ofHours(1).toNanos();
 
     private static final AtomicBoolean stopRequested = new AtomicBoolean();
     private static volatile Checkpoint activeCheckpoint;
     private static volatile String checkpointPath;
+    private static volatile long lastCheckpointNanos;
 
     private static final class Checkpoint implements Serializable {
         private static final long serialVersionUID = 2L;
@@ -145,7 +146,7 @@ public class GrafoPorAnomaliasAzureSpot {
                         state.j - state.radius, 2 * state.radius + 1);
 
                     set(state.dtws, state.i, state.j, value);
-                    if ((state.j & (CHECKPOINT_EVERY - 1)) == 0) save(state);
+                    if (checkpointDue()) save(state);
                 }
                 state.j = state.i + 2 * state.radius + 1;
             }
@@ -182,6 +183,7 @@ public class GrafoPorAnomaliasAzureSpot {
                             state.orbit[state.j] * state.yMultiplier;
                         set(state.graph, state.i, state.j, Math.sqrt(dx * dx + dy * dy));
                     }
+                    if (checkpointDue()) save(state);
                 }
                 state.j = state.i + 1;
             }
@@ -319,6 +321,11 @@ public class GrafoPorAnomaliasAzureSpot {
             json.contains("\"EventType\": \"Preempt\"");
     }
 
+    private static boolean checkpointDue() {
+        long last = lastCheckpointNanos;
+        return last == 0L || System.nanoTime() - last >= CHECKPOINT_INTERVAL_NANOS;
+    }
+
     private static synchronized void save(Checkpoint state) throws IOException {
         activeCheckpoint = state;
         String temporary = checkpointPath + ".tmp";
@@ -329,6 +336,7 @@ public class GrafoPorAnomaliasAzureSpot {
         java.nio.file.Files.move(java.nio.file.Path.of(temporary),
             java.nio.file.Path.of(checkpointPath), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
             java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        lastCheckpointNanos = System.nanoTime();
         System.err.println(Instant.now() + " checkpoint salvo: fase=" + state.phase +
             ", i=" + state.i + ", j=" + state.j);
     }

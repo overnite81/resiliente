@@ -117,7 +117,25 @@ python -m experiments.run_resnet_pilot \
   --time-log experiments/results/resnet_pilot_timing.csv
 ```
 
-O log separa tempo de codificação das imagens, épocas e treino/inferência. Use o tempo medido por época para projetar um experimento maior; a execução aleatória é apenas validação do pipeline, **não** resultado científico. `--weights imagenet` habilita inicialização pré-treinada (baixa os pesos na primeira execução); registre essa escolha e compare todas as representações com a mesma configuração. O conjunto de teste contém somente um registro, portanto as métricas do piloto são diagnósticas, não uma estimativa robusta de generalização.
+O log separa tempo de codificação das imagens, épocas e treino/inferência. `--weights imagenet` habilita inicialização pré-treinada (baixa os pesos na primeira execução); registre essa escolha e compare todas as representações com a mesma configuração. O conjunto de teste contém somente um registro, portanto as métricas do piloto são diagnósticas, não uma estimativa robusta de generalização.
+
+### Perfil longo para Azure Spot ARM64
+
+Foi adicionado o perfil `spot-arm64-long`: 18 registros MIT-BIH (com 105 como teste), limite de 64 exemplos por classe/registro e 12 épocas por representação. Isso aumenta o conjunto de treino e o tempo computacional em relação ao piloto de 2 épocas. Execute na VM Spot ARM64, idealmente com os arquivos WFDB já no disco, para não gastar a janela de uptime com download:
+
+```bash
+OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=2 \
+python -m experiments.run_resnet_pilot --profile spot-arm64-long \
+  --data-dir data/mitdb --threads 2 --seed 42
+```
+
+O perfil grava resultados e tempos por representação assim que cada uma termina, em `resnet_spot_arm64_long.csv` e `resnet_spot_arm64_long_timing.csv`. Se a VM for desalocada, reinicie com os mesmos argumentos e `--resume`; representações concluídas serão ignoradas. A representação interrompida durante treino é reiniciada do começo (não há checkpoint de época). Sem `--resume`, os CSVs de destino são sobrescritos.
+
+O CSV de tempos também registra o uptime Linux da VM no início do processo e ao fim de cada representação (`/proc/uptime`). Isso registra uptime observado enquanto o processo executa, mas não detecta por si só uma eviction abrupta. Para calcular uptime até desalocação, combine os logs preservados em armazenamento persistente com os eventos de desalocação do Azure (e registre também inícios de alocação sem resultado final, que são observações censuradas). Uma execução que termina normalmente fornece somente um limite inferior, não o instante da eviction. Também não há um uptime médio universal/garantido para Spot: ele varia com SKU, região, zona e capacidade disponível. Portanto, as 12 épocas são uma configuração de carga, não uma previsão de que o trabalho caberá numa janela típica. Depois das primeiras medições, estime a duração total usando os tempos por época e escolha `--epochs` deixando margem para carga dos dados, codificação, inferência e gravação. Não use a média como garantia de sobrevivência de uma alocação.
+
+`--records`, `--epochs`, `--limit-per-class-record`, `--representations` e os caminhos de saída podem ser sobrescritos para ajustar a carga. Ao retomar, mantenha a configuração e a seed originais; o modo `--resume` identifica trabalho concluído pelo nome da representação, não valida se os demais parâmetros coincidem.
+
+A execução aleatória continua sendo validação do pipeline, **não** resultado científico. O teste em um único registro e as limitações de um único split exigem validação agrupada por registro e múltiplas seeds antes de qualquer conclusão sobre desempenho.
 
 Se PhysioNet estiver inacessível, baixe os arquivos WFDB antecipadamente e passe `--data-dir` com o diretório local.
 

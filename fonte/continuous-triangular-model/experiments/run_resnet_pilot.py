@@ -17,8 +17,29 @@ DEFAULT_RECORDS = ("100", "101", "103", "105")
 
 
 def parse_args():
+    long_records = (
+        "100", "101", "103", "105", "106", "108", "109", "111", "112",
+        "113", "115", "116", "118", "119", "121", "122", "123", "124",
+    )
+    bootstrap = argparse.ArgumentParser(add_help=False)
+    bootstrap.add_argument("--profile", choices=("pilot", "spot-arm64-long"), default="pilot")
+    profile, _ = bootstrap.parse_known_args()
+    if profile.profile == "spot-arm64-long":
+        defaults = {
+            "records": long_records, "epochs": 12,
+            "output": Path("experiments/results/resnet_spot_arm64_long.csv"),
+            "time_log": Path("experiments/results/resnet_spot_arm64_long_timing.csv"),
+        }
+    else:
+        defaults = {
+            "records": DEFAULT_RECORDS, "epochs": 2,
+            "output": Path("experiments/results/resnet_pilot.csv"),
+            "time_log": Path("experiments/results/resnet_pilot_timing.csv"),
+        }
+
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--records", nargs="+", default=DEFAULT_RECORDS)
+    parser.add_argument("--profile", choices=("pilot", "spot-arm64-long"), default="pilot")
+    parser.add_argument("--records", nargs="+", default=defaults["records"])
     parser.add_argument("--test-record", default="105")
     parser.add_argument("--data-dir", type=Path, default=None)
     parser.add_argument("--window-samples", type=int, default=360)
@@ -27,15 +48,17 @@ def parse_args():
     parser.add_argument("--ctm-span", type=int, default=48)
     parser.add_argument("--ctm-measure", choices=("amplitude", "energy"), default="amplitude")
     parser.add_argument("--limit-per-class-record", type=int, default=64)
-    parser.add_argument("--epochs", type=int, default=2)
+    parser.add_argument("--epochs", type=int, default=defaults["epochs"])
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--threads", type=int, default=2)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--weights", choices=("none", "imagenet"), default="none")
-    parser.add_argument("--output", type=Path, default=Path("experiments/results/resnet_pilot.csv"))
-    parser.add_argument("--time-log", type=Path, default=Path("experiments/results/resnet_pilot_timing.csv"))
+    parser.add_argument("--output", type=Path, default=defaults["output"])
+    parser.add_argument("--time-log", type=Path, default=defaults["time_log"])
     parser.add_argument("--representations", nargs="+", choices=REPRESENTATIONS, default=list(REPRESENTATIONS))
+    parser.add_argument("--resume", action="store_true",
+                        help="no perfil longo, pula representações já gravadas nos CSVs")
     return parser.parse_args()
 
 
@@ -67,8 +90,7 @@ def train_and_score(images_train, y_train, images_test, y_test, args):
     import torchvision
     from torch.utils.data import DataLoader, TensorDataset
 
-    #torch.set_num_threads(args.threads)
-    torch.set_num_threads(1)
+    torch.set_num_threads(args.threads)
     torch.manual_seed(args.seed)
     weights = torchvision.models.ResNet18_Weights.DEFAULT if args.weights == "imagenet" else None
     model = torchvision.models.resnet18(weights=weights)
@@ -126,12 +148,29 @@ def train_and_score(images_train, y_train, images_test, y_test, args):
     return metrics, fit_seconds, epoch_seconds
 
 
-def write_csv(path, rows):
+def write_csv_row(path, row, append):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+    with path.open("a" if append else "w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(row))
+        if not append:
+            writer.writeheader()
+        writer.writerow(row)
+        stream.flush()
+
+
+def completed_representations(path):
+    if not path.exists():
+        return set()
+    with path.open(newline="") as stream:
+        return {row["representation"] for row in csv.DictReader(stream)}
+
+
+def instance_uptime_seconds():
+    """Return Linux host uptime, or NaN on non-Linux systems."""
+    try:
+        return float(Path("/proc/uptime").read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        return float("nan")
 
 
 def main():
@@ -150,9 +189,9 @@ def main():
 
     random.seed(args.seed)
     np.random.seed(args.seed)
-    #torch.set_num_threads(args.threads)
-    torch.set_num_threads(1)
-    print(f"PyTorch {torch.__version__}; torchvision {torchvision.__version__}; threads={args.threads}")
+    instance_uptime_start = instance_uptime_seconds()
+    torch.set_num_threads(args.threads)
+    print(f"Perfil={args.profile}; PyTorch {torch.__version__}; torchvision {torchvision.__version__}; threads={args.threads}")
     load_started = time.perf_counter()
     dataset = load_mitdb(args.records, window_samples=args.window_samples,
                          channel=args.channel, data_dir=args.data_dir)
@@ -169,8 +208,22 @@ def main():
             raise SystemExit(f"A divisão de {name} precisa conter as duas classes.")
 
     print(f"Dados carregados em {load_seconds:.1f}s; treino={len(train_indices)}, teste={len(test_indices)}")
-    result_rows, timing_rows = [], []
+    if args.resume and args.profile != "spot-arm64-long":
+        raise SystemExit("--resume só está disponível no perfil spot-arm64-long.")
+    if args.resume:
+        if args.output.exists() != args.time_log.exists():
+            raise SystemExit("Para retomar, os CSVs de resultados e tempos precisam existir juntos.")
+        done = completed_representations(args.output) & completed_representations(args.time_log)
+        write_first = not args.output.exists()
+    else:
+        done = set()
+        args.output.unlink(missing_ok=True)
+        args.time_log.unlink(missing_ok=True)
+        write_first = True
     for representation in args.representations:
+        if representation in done:
+            print(f"\n[{representation}] já registrada; pulando (retomada)", flush=True)
+            continue
         print(f"\n[{representation}] codificando imagens", flush=True)
         train_images, train_encode_seconds = encode_batch(dataset, train_indices, representation, args)
         test_images, test_encode_seconds = encode_batch(dataset, test_indices, representation, args)
@@ -187,13 +240,19 @@ def main():
             "n_train": len(train_indices),
             "n_test": len(test_indices),
             "image_size": args.image_size,
+            "ctm_span": args.ctm_span,
+            "ctm_measure": args.ctm_measure,
             "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "learning_rate": args.learning_rate,
+            "limit_per_class_record": args.limit_per_class_record,
+            "profile": args.profile,
             "weights": args.weights,
             "seed": args.seed,
             **metrics,
         }
-        result_rows.append(row)
-        timing_rows.append({
+        write_csv_row(args.output, row, append=not write_first)
+        timing_row = {
             "representation": representation,
             "data_load_seconds": round(load_seconds, 3),
             "train_encode_seconds": round(train_encode_seconds, 3),
@@ -205,13 +264,17 @@ def main():
             "n_test": len(test_indices),
             "epochs": args.epochs,
             "threads": args.threads,
-        })
+            "profile": args.profile,
+            "seed": args.seed,
+            "instance_uptime_start_seconds": round(instance_uptime_start, 1),
+            "instance_uptime_end_seconds": round(instance_uptime_seconds(), 1),
+        }
+        write_csv_row(args.time_log, timing_row, append=not write_first)
+        write_first = False
         print("  métricas: " + ", ".join(f"{k}={v:.4f}" for k, v in metrics.items()))
         print(f"  encode={train_encode_seconds + test_encode_seconds:.1f}s; total={total_seconds:.1f}s")
         del train_images, test_images
 
-    write_csv(args.output, result_rows)
-    write_csv(args.time_log, timing_rows)
     print(f"\nResultados: {args.output}\nTempos: {args.time_log}")
 
 

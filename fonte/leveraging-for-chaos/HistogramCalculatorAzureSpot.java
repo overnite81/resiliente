@@ -18,11 +18,13 @@ public class HistogramCalculatorAzureSpot {
     private static final String EVENT_URL =
         "http://169.254.169.254/metadata/scheduledevents?api-version=2020-07-01";
     private static final long DEFAULT_POLL_MS = 5_000L;
-    private static final long CHECKPOINT_EVERY = 16L;
+    // Checkpoint periódico de uma hora; evictions continuam tentando salvar sob demanda.
+    private static final long CHECKPOINT_INTERVAL_NANOS = Duration.ofHours(1).toNanos();
 
     private static final AtomicBoolean stopRequested = new AtomicBoolean();
     private static volatile HistogramState activeState;
     private static volatile String checkpointPath;
+    private static volatile long lastCheckpointNanos;
 
     private static final class HistogramState implements Serializable {
         private static final long serialVersionUID = 2L;
@@ -40,6 +42,8 @@ public class HistogramCalculatorAzureSpot {
         int processedCount;
         int windowStart;
         int currentIndex;
+        int nextDensityIndex;
+        int nextRank;
     }
 
     private static final class Options {
@@ -119,23 +123,22 @@ public class HistogramCalculatorAzureSpot {
         }
 
         if (state.phase == 0) {
-            // Fase 1: Leitura dos dados
-            state.phase = 1;
             processInputData(state);
+            state.phase = 1;
             save(state);
         }
 
         if (state.phase == 1) {
-            // Fase 2: Cálculo da densidade
-            state.phase = 2;
             processDensityCalculation(state);
+            if (stopRequested.get()) return;
+            state.phase = 2;
             save(state);
         }
 
         if (state.phase == 2) {
-            // Fase 3: Histograma por rank
-            state.phase = 3;
             processHistogramByRank(state);
+            if (stopRequested.get()) return;
+            state.phase = 3;
             save(state);
         }
 
@@ -179,49 +182,49 @@ public class HistogramCalculatorAzureSpot {
         state.currentIndex = 0;
     }
 
-    private static void processDensityCalculation(HistogramState state) throws Exception {
-        // Process density calculation with checkpointing
-        state.density = new int[state.sortedData.length];
-        for (int i = 0; i < state.sortedData.length; i++) {
-            if (stopRequested.get()) return;
-            
-            double v = state.sortedData[i];
-            if (v < state.lower + state.eps || v > state.upper - state.eps) {
-                state.density[i] = 0;
-                continue;
-            }
-            
-            int p1 = lowerBound(state.sortedData, v - state.eps);
-            int p2 = upperBound(state.sortedData, v + state.eps);
-            state.density[i] = p2 - p1 + 1;
-            
-            if ((i & (CHECKPOINT_EVERY - 1)) == 0) {
+    private static void processDensityCalculation(HistogramState state) throws IOException {
+        if (state.density == null) state.density = new int[state.sortedData.length];
+        for (int i = state.nextDensityIndex; i < state.sortedData.length; i++) {
+            if (stopRequested.get()) {
                 save(state);
+                return;
             }
+
+            double value = state.sortedData[i];
+            if (value >= state.lower + state.eps && value <= state.upper - state.eps) {
+                int first = lowerBound(state.sortedData, value - state.eps);
+                int last = upperBound(state.sortedData, value + state.eps);
+                state.density[i] = last - first + 1;
+            }
+            state.nextDensityIndex = i + 1;
+            if (checkpointDue()) save(state);
         }
     }
 
-    private static void processHistogramByRank(HistogramState state) throws Exception {
-        // Process histogram by rank with checkpointing
-        int n = state.inputData.size();
-        double[] data = new double[n];
-        for (int i = 0; i < n; i++) data[i] = state.inputData.get(i);
-        
-        state.indices = new Integer[n];
-        for (int i = 0; i < n; i++) state.indices[i] = i;
-        Arrays.sort(state.indices, (a, b) -> {
-            int c = Double.compare(data[a], data[b]);
-            return (c != 0) ? c : a - b;
-        });
-        
-        state.histogram = new int[n];
-        for (int r = state.left; r < state.right && r < n; r++) {
-            if (stopRequested.get()) return;
-            state.histogram[state.indices[r]]++;
-            
-            if ((r & (CHECKPOINT_EVERY - 1)) == 0) {
+    private static void processHistogramByRank(HistogramState state) throws IOException {
+                int n = state.inputData.size();
+        if (state.indices == null) {
+            double[] data = new double[n];
+            for (int i = 0; i < n; i++) data[i] = state.inputData.get(i);
+
+            state.indices = new Integer[n];
+            for (int i = 0; i < n; i++) state.indices[i] = i;
+            Arrays.sort(state.indices, (a, b) -> {
+                int comparison = Double.compare(data[a], data[b]);
+                return comparison != 0 ? comparison : Integer.compare(a, b);
+            });
+        }
+        if (state.histogram == null) state.histogram = new int[n];
+        if (state.nextRank < state.left) state.nextRank = state.left;
+
+        for (int rank = state.nextRank; rank < state.right && rank < n; rank++) {
+            if (stopRequested.get()) {
                 save(state);
+                return;
             }
+            state.histogram[state.indices[rank]]++;
+            state.nextRank = rank + 1;
+            if (checkpointDue()) save(state);
         }
     }
 
@@ -260,6 +263,11 @@ public class HistogramCalculatorAzureSpot {
             json.contains("\"EventType\": \"Preempt\"");
     }
 
+    private static boolean checkpointDue() {
+        long last = lastCheckpointNanos;
+        return last == 0L || System.nanoTime() - last >= CHECKPOINT_INTERVAL_NANOS;
+    }
+
     private static synchronized void save(HistogramState state) throws IOException {
         activeState = state;
         String temporary = checkpointPath + ".tmp";
@@ -270,6 +278,7 @@ public class HistogramCalculatorAzureSpot {
         java.nio.file.Files.move(java.nio.file.Path.of(temporary),
             java.nio.file.Path.of(checkpointPath), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
             java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        lastCheckpointNanos = System.nanoTime();
         System.err.println(Instant.now() + " checkpoint salvo: fase=" + state.phase +
             ", processados=" + state.processedCount);
     }
