@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Five-fold, record-grouped evaluation of ResNet-18 image representations."""
+"""Five-fold, record-grouped comparison of image representations and CNN backbones."""
 from __future__ import annotations
 
 import argparse
@@ -28,6 +28,7 @@ DEFAULT_RECORDS = (
     "113", "115", "116", "118", "119", "121", "122", "123", "124",
 )
 METRICS = ("accuracy", "balanced_accuracy", "f1", "roc_auc", "average_precision")
+MODELS = ("resnet18", "resnet34", "efficientnet_b0")
 
 
 def parse_args():
@@ -49,10 +50,12 @@ def parse_args():
     parser.add_argument("--weights", choices=("none", "imagenet"), default="none")
     parser.add_argument("--representations", nargs="+", choices=REPRESENTATIONS,
                         default=list(REPRESENTATIONS))
+    parser.add_argument("--models", nargs="+", choices=MODELS, default=list(MODELS),
+                        help="backbones a comparar (padrão: ResNet-18, ResNet-34 e EfficientNet-B0)")
     parser.add_argument("--output-dir", type=Path,
-                        default=Path("experiments/results/resnet_cv5"))
+                        default=Path("experiments/results/cnn_cv5"))
     parser.add_argument("--checkpoint-dir", type=Path,
-                        default=Path("experiments/results/resnet_cv5_checkpoints"))
+                        default=Path("experiments/results/cnn_cv5_checkpoints"))
     parser.add_argument("--resume", action="store_true",
                         help="retoma folds/épocas a partir dos CSVs e checkpoints existentes")
     return parser.parse_args()
@@ -141,7 +144,30 @@ def _atomic_torch_save(torch, payload, path: Path):
     os.replace(temporary, path)
 
 
-def fit_fold(images, labels, train_idx, valid_idx, args, checkpoint_path, fold_seed):
+def build_model(torch, torchvision, model_name, weights):
+    """Create a supported torchvision backbone with a two-class output head."""
+    weight_enums = {
+        "resnet18": torchvision.models.ResNet18_Weights,
+        "resnet34": torchvision.models.ResNet34_Weights,
+        "efficientnet_b0": torchvision.models.EfficientNet_B0_Weights,
+    }
+    constructors = {
+        "resnet18": torchvision.models.resnet18,
+        "resnet34": torchvision.models.resnet34,
+        "efficientnet_b0": torchvision.models.efficientnet_b0,
+    }
+    if model_name not in constructors:
+        raise ValueError(f"Backbone não suportado: {model_name}")
+    model_weights = weight_enums[model_name].DEFAULT if weights == "imagenet" else None
+    model = constructors[model_name](weights=model_weights)
+    if model_name.startswith("resnet"):
+        model.fc = torch.nn.Linear(model.fc.in_features, 2)
+    else:
+        model.classifier[-1] = torch.nn.Linear(model.classifier[-1].in_features, 2)
+    return model
+
+
+def fit_fold(images, labels, train_idx, valid_idx, args, checkpoint_path, fold_seed, model_name):
     import torch
     import torchvision
     from torch.utils.data import DataLoader, Subset, TensorDataset
@@ -161,9 +187,7 @@ def fit_fold(images, labels, train_idx, valid_idx, args, checkpoint_path, fold_s
     tensor_labels = torch.from_numpy(labels.astype(np.int64))
     dataset = TensorDataset(x, tensor_labels)
 
-    model_weights = torchvision.models.ResNet18_Weights.DEFAULT if args.weights == "imagenet" else None
-    model = torchvision.models.resnet18(weights=model_weights)
-    model.fc = torch.nn.Linear(model.fc.in_features, 2)
+    model = build_model(torch, torchvision, model_name, args.weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
     counts = np.bincount(labels[train_idx], minlength=2)
     class_weights = torch.tensor(len(train_idx) / np.maximum(2 * counts, 1), dtype=torch.float32)
@@ -257,15 +281,17 @@ def read_rows(path: Path):
         return list(csv.DictReader(stream))
 
 
-def write_summary(path: Path, representation_rows):
-    fields = ("representation", "metric", "n_folds", "mean", "std", "ci95_low", "ci95_high")
+def write_summary(path: Path, fold_rows):
+    fields = ("model", "representation", "metric", "n_folds", "mean", "std", "ci95_low", "ci95_high")
     rows = []
-    for representation in REPRESENTATIONS:
-        folds = [row for row in representation_rows if row["representation"] == representation]
-        if not folds:
-            continue
+    combinations = sorted({(row["model"], row["representation"]) for row in fold_rows})
+    for model_name, representation in combinations:
+        folds = [
+            row for row in fold_rows
+            if row["model"] == model_name and row["representation"] == representation
+        ]
         for summary in summarize_folds(folds):
-            rows.append({"representation": representation, **summary})
+            rows.append({"model": model_name, "representation": representation, **summary})
     temporary = path.with_suffix(path.suffix + ".tmp")
     write_rows(temporary, rows, fields)
     os.replace(temporary, path)
@@ -283,9 +309,9 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     args.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    fold_path = args.output_dir / "resnet_cv5_folds.csv"
-    summary_path = args.output_dir / "resnet_cv5_summary.csv"
-    timing_path = args.output_dir / "resnet_cv5_timing.csv"
+    fold_path = args.output_dir / "cnn_cv5_folds.csv"
+    summary_path = args.output_dir / "cnn_cv5_summary.csv"
+    timing_path = args.output_dir / "cnn_cv5_timing.csv"
     if not args.resume:
         for path in (fold_path, summary_path, timing_path):
             path.unlink(missing_ok=True)
@@ -312,71 +338,75 @@ def main():
     fold_rows = read_rows(fold_path) if args.resume else []
     timing_rows = read_rows(timing_path) if args.resume else []
     fold_fields = [
-        "representation", "fold", "validation_records", "n_train", "n_validation",
+        "model", "representation", "fold", "validation_records", "n_train", "n_validation",
         "epochs", "seed", "image_size", "ctm_span", "ctm_measure", "weights",
         "accuracy", "balanced_accuracy", "f1", "roc_auc", "average_precision",
     ]
     timing_fields = [
-        "representation", "fold", "encode_seconds", "epoch_seconds_mean",
+        "model", "representation", "fold", "encode_seconds", "epoch_seconds_mean",
         "fit_epoch_seconds", "inference_seconds", "wall_seconds", "n_train",
         "n_validation", "epochs", "threads", "seed",
     ]
 
     for representation in args.representations:
         images, encode_seconds = encode_dataset(dataset, selected, representation, args)
-        for fold_number, (train_idx, valid_idx) in enumerate(splits, start=1):
-            fold_key = f"{representation}:{fold_number}"
-            already_done = any(
-                row["representation"] == representation and int(row["fold"]) == fold_number
-                for row in fold_rows
-            )
-            checkpoint = args.checkpoint_dir / f"{representation}_fold_{fold_number}.pt"
-            if already_done:
+        for model_name in args.models:
+            for fold_number, (train_idx, valid_idx) in enumerate(splits, start=1):
+                already_done = any(
+                    row["model"] == model_name
+                    and row["representation"] == representation
+                    and int(row["fold"]) == fold_number
+                    for row in fold_rows
+                )
+                checkpoint = args.checkpoint_dir / f"{model_name}_{representation}_fold_{fold_number}.pt"
+                if already_done:
+                    checkpoint.unlink(missing_ok=True)
+                    continue
+                fold_seed = args.seed + fold_number
+                print(f"\n[{model_name} + {representation}] fold {fold_number}/{args.folds}; seed={fold_seed}", flush=True)
+                started = time.perf_counter()
+                metrics, epoch_seconds, inference_seconds = fit_fold(
+                    images, labels, train_idx, valid_idx, args, checkpoint, fold_seed, model_name,
+                )
+                wall_seconds = time.perf_counter() - started
+                fold_row = {
+                    "model": model_name,
+                    "representation": representation,
+                    "fold": fold_number,
+                    "validation_records": ";".join(sorted(set(groups[valid_idx]))),
+                    "n_train": len(train_idx),
+                    "n_validation": len(valid_idx),
+                    "epochs": args.epochs,
+                    "seed": fold_seed,
+                    "image_size": args.image_size,
+                    "ctm_span": args.ctm_span,
+                    "ctm_measure": args.ctm_measure,
+                    "weights": args.weights,
+                    **metrics,
+                }
+                timing_row = {
+                    "model": model_name,
+                    "representation": representation,
+                    "fold": fold_number,
+                    "encode_seconds": round(encode_seconds, 3),
+                    "epoch_seconds_mean": round(float(np.mean(epoch_seconds)), 3),
+                    "fit_epoch_seconds": round(float(np.sum(epoch_seconds)), 3),
+                    "inference_seconds": round(inference_seconds, 3),
+                    "wall_seconds": round(wall_seconds, 3),
+                    "n_train": len(train_idx),
+                    "n_validation": len(valid_idx),
+                    "epochs": args.epochs,
+                    "threads": args.threads,
+                    "seed": fold_seed,
+                }
+                write_rows(fold_path, [fold_row], fold_fields, append=fold_path.exists())
+                write_rows(timing_path, [timing_row], timing_fields, append=timing_path.exists())
+                fold_rows.append({key: str(value) for key, value in fold_row.items()})
+                timing_rows.append({key: str(value) for key, value in timing_row.items()})
                 checkpoint.unlink(missing_ok=True)
-                continue
-            fold_seed = args.seed + fold_number
-            print(f"\n[{representation}] fold {fold_number}/{args.folds}; seed={fold_seed}", flush=True)
-            started = time.perf_counter()
-            metrics, epoch_seconds, inference_seconds = fit_fold(
-                images, labels, train_idx, valid_idx, args, checkpoint, fold_seed,
-            )
-            wall_seconds = time.perf_counter() - started
-            fold_row = {
-                "representation": representation,
-                "fold": fold_number,
-                "validation_records": ";".join(sorted(set(groups[valid_idx]))),
-                "n_train": len(train_idx),
-                "n_validation": len(valid_idx),
-                "epochs": args.epochs,
-                "seed": fold_seed,
-                "image_size": args.image_size,
-                "ctm_span": args.ctm_span,
-                "ctm_measure": args.ctm_measure,
-                "weights": args.weights,
-                **metrics,
-            }
-            timing_row = {
-                "representation": representation,
-                "fold": fold_number,
-                "encode_seconds": round(encode_seconds, 3),
-                "epoch_seconds_mean": round(float(np.mean(epoch_seconds)), 3),
-                "fit_epoch_seconds": round(float(np.sum(epoch_seconds)), 3),
-                "inference_seconds": round(inference_seconds, 3),
-                "wall_seconds": round(wall_seconds, 3),
-                "n_train": len(train_idx),
-                "n_validation": len(valid_idx),
-                "epochs": args.epochs,
-                "threads": args.threads,
-                "seed": fold_seed,
-            }
-            write_rows(fold_path, [fold_row], fold_fields, append=fold_path.exists())
-            write_rows(timing_path, [timing_row], timing_fields, append=timing_path.exists())
-            fold_rows.append({key: str(value) for key, value in fold_row.items()})
-            timing_rows.append({key: str(value) for key, value in timing_row.items()})
-            checkpoint.unlink(missing_ok=True)
-            write_summary(summary_path, fold_rows)
-            print("  métricas: " + ", ".join(f"{key}={value:.4f}" for key, value in metrics.items()), flush=True)
-            print(f"  fold concluído em {wall_seconds / 60:.1f} min", flush=True)
+                write_summary(summary_path, fold_rows)
+                print("  métricas: " + ", ".join(f"{key}={value:.4f}" for key, value in metrics.items()), flush=True)
+                print(f"  fold concluído em {wall_seconds / 60:.1f} min", flush=True)
         del images
 
     write_summary(summary_path, fold_rows)

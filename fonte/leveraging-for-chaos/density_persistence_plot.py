@@ -221,6 +221,10 @@ if __name__ == "__main__":
 
         print(f"\nd = {d}")
 
+        m = 256 * 2
+        w1 = int(0.7 * m)
+        w2 = m - w1
+        
         samples = []
 
         for _ in range(5000):
@@ -228,13 +232,13 @@ if __name__ == "__main__":
             a = np.random.normal(
                 loc=20,
                 scale=0.3,
-                size=256
+                size=w1
             )
 
             b = np.random.normal(
                 loc=20 + d,
                 scale=0.3,
-                size=256
+                size=w2
             )
 
             row = np.concatenate([a, b])
@@ -351,7 +355,8 @@ if __name__ == "__main__":
             prominence=np.max(H) * 0.05
         )
 
-        delta_rank = float("nan")
+        #delta_rank = float("nan")
+        delta_rank = 0
 
         if len(peaks) >= 2:
 
@@ -397,5 +402,21 @@ if __name__ == "__main__":
     plt.grid(True)
 
     plt.tight_layout()
+
+    plt.show()
+
+
+    plt.figure(figsize=(8,5))
+
+    plt.plot(
+        distances,
+        delta_rank,
+        "o-"
+    )
+
+    plt.xlabel("Separação física d")
+    plt.ylabel("Separação dos picos Δrank")
+
+    plt.grid(True)
 
     plt.show()
