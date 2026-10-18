@@ -52,6 +52,32 @@ O primeiro estudo usa a medida `amplitude`. A variante experimental por energia 
 python -m experiments.run_comparison --ctm-measure energy
 ```
 
+## Estudo ETT de previsão temporal: representação × modelo
+
+`experiments.run_ett_study` implementa um experimento separado para Electricity Transformer Temperature. Ele usa todas as colunas numéricas como entrada multivariada e prevê a coluna `OT` por padrão, com horizonte direto de 96 timestamps. A separação cronológica é 60/20/20; estatísticas de normalização são ajustadas apenas no trecho de treino. Cada janela de entrada tem 336 timestamps. Janelas de treino são subamostradas uniformemente até 1024 por padrão, enquanto validação/teste avançam pelo horizonte para reduzir a redundância de previsões sobrepostas.
+
+O desenho cruza quatro entradas (Raw, STFT, Wavelet CWT e CTM) com SVM de regressão, ResNet-18 e Swin-Tiny. CNNs e SVM recebem o mesmo mapa 96×96; o SVM o achata em um vetor, com padronização ajustada no treino. A saída é a previsão multi-horizonte de `OT`. O runner grava `ett_metrics.csv`, `ett_deltas.csv` e `ett_config.json` em `experiments/results/ett_study/`. A coluna `delta_cnn_minus_svm` é CNN − SVM: valores negativos favorecem CNN para MAE/MSE/RMSE; valores positivos favorecem CNN para R². O conjunto de teste só é usado para avaliação final, não para early stopping.
+
+Baixe um CSV público do ETT (por exemplo, `ETTh1.csv`) e forneça seu caminho. Instale PyTorch/torchvision conforme as instruções ARM64 acima; Swin-Tiny requer torchvision com `torchvision.models.swin_t` (a versão mínima especificada em `requirements-resnet.txt` atende):
+
+```bash
+OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=2 \
+.venv/bin/python -m experiments.run_ett_study \
+  --csv data/ETT-small/ETTh1.csv --dataset-name ETTh1 \
+  --target OT --sequence-length 336 --prediction-length 96 \
+  --models svm resnet18 swin_tiny --representations raw stft wavelet ctm \
+  --epochs 10 --threads 2 --seed 42
+```
+
+O código é um protocolo inicial, não uma reprodução exata de um benchmark ETT publicado. Ele usa regressão linear multi-output via `LinearSVR` como baseline SVM, inicialização aleatória das CNNs, um único split cronológico e uma seed; não há busca de hiperparâmetros nem checkpoint/resume. O empilhamento das variáveis em uma imagem e o redimensionamento do mapa para entrada do SVM são escolhas experimentais que devem ser congeladas, documentadas e acompanhadas de ablações. As janelas de avaliação se sobrepõem nos contextos históricos, embora os timestamps-alvo permaneçam em suas respectivas partições; considere isso ao interpretar incerteza e agregação das métricas. Não interprete os resultados como evidência de vantagem do CTM antes de executar validações repetidas e comparação com baselines de previsão temporal convencionais.
+
+Smoke tests sem executar treino:
+
+```bash
+.venv/bin/python -m unittest discover -s experiments/tests
+.venv/bin/python -m experiments.run_ett_study --help
+```
+
 ## Diagnostico de `Instrução ilegal` (SIGILL) no Raspberry Pi 4
 
 No Raspberry Pi 4, execute primeiro o diagnostico abaixo antes de reinstalar qualquer pacote. Ele roda cada etapa em subprocessos separados para identificar qual biblioteca nativa mata o processo:

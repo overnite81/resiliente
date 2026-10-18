@@ -345,6 +345,7 @@ if __name__ == "__main__":
 
 
     n_peaks = []
+    delta_ranks = []
 
     for d in distances:
 
@@ -372,6 +373,7 @@ if __name__ == "__main__":
             delta_rank = abs(p1 - p2)
 
         n_peaks.append(len(peaks))
+        delta_ranks.append(delta_rank)
 
         print(
             f"d={d} "
@@ -410,7 +412,7 @@ if __name__ == "__main__":
 
     plt.plot(
         distances,
-        delta_rank,
+        delta_ranks,
         "o-"
     )
 
