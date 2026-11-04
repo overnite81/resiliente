@@ -434,6 +434,30 @@ def save_dict_rows(path: Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
+class CsvStreamWriter:
+    """CSV writer com cabeçalho sob demanda e flush entre casos."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.output = path.open("w", newline="", encoding="utf-8")
+        self.writer = None
+
+    def write(self, row: dict) -> None:
+        if self.writer is None:
+            fieldnames = list(row)
+            self.writer = csv.DictWriter(
+                self.output, fieldnames=fieldnames, extrasaction="ignore"
+            )
+            self.writer.writeheader()
+        self.writer.writerow(row)
+
+    def flush(self) -> None:
+        self.output.flush()
+
+    def close(self) -> None:
+        self.output.close()
+
+
 def run_case(
     rng: np.random.Generator,
     scenario: dict,
@@ -443,6 +467,9 @@ def run_case(
     replicate_count: int,
     samples_per_ensemble: int,
     perturb: bool,
+    barcode_writer: CsvStreamWriter,
+    filtration_writer: CsvStreamWriter,
+    profile_writer: CsvStreamWriter,
 ):
     """Executa um caso; retorna linhas de ensemble, barcodes e perfis."""
     case_name = scenario["scenario"]
@@ -454,12 +481,10 @@ def run_case(
     }
     topo_sum = np.zeros(m, dtype=float)
     truth_sum = np.zeros(m, dtype=float)
-    bar_rows = []
-    filtration_rows = []
     realization_rows = []
-    replicate_profiles = {
-        policy: {k: [] for k in k_values} for policy in TIE_POLICIES
-    }
+    barcode_examples = []
+    filtration_examples = []
+    profile_examples = []
     all_topology_component_counts = []
 
     for replicate in range(replicate_count):
@@ -488,18 +513,19 @@ def run_case(
             density = local_density(sorted_sample, epsilon)
             bars, topo_score = h0_superlevel_path(density)
             for threshold, beta_0 in superlevel_component_counts(density):
-                filtration_rows.append(
-                    {
-                        "scenario": case_name,
-                        "case_id": case_id,
-                        "m": m,
-                        "epsilon": epsilon,
-                        "replicate": replicate,
-                        "sample": sample_index,
-                        "threshold": threshold,
-                        "beta_0": beta_0,
-                    }
-                )
+                filtration_row = {
+                    "scenario": case_name,
+                    "case_id": case_id,
+                    "m": m,
+                    "epsilon": epsilon,
+                    "replicate": replicate,
+                    "sample": sample_index,
+                    "threshold": threshold,
+                    "beta_0": beta_0,
+                }
+                filtration_writer.write(filtration_row)
+                if case_name in ("uniform", "bimodal_separated") and replicate == 0 and sample_index == 0:
+                    filtration_examples.append(filtration_row)
             t_replicate += topo_score
             topo_component_counts.append(len(bars))
             topo_lifespans.extend(bar.persistence for bar in bars)
@@ -513,8 +539,7 @@ def run_case(
                     h_replicate[policy][k] += select_rank_weights(density, k, policy, rng)
 
             for bar in bars:
-                bar_rows.append(
-                    {
+                barcode_row = {
                         "scenario": case_name,
                         "case_id": case_id,
                         "m": m,
@@ -539,7 +564,9 @@ def run_case(
                         "peak_quantile": bar.peak_rank / m,
                         "essential": int(bar.essential),
                     }
-                )
+                barcode_writer.write(barcode_row)
+                if case_name == "bimodal_separated" and replicate == 0 and sample_index == 0:
+                    barcode_examples.append(barcode_row)
 
             if perturb:
                 perturbed = sample + rng.normal(0.0, max(epsilon * 0.02, 1e-8), m)
@@ -578,7 +605,6 @@ def run_case(
                 profile = h_replicate[policy][k] / samples_per_ensemble
                 h_replicate[policy][k] = profile
                 pi_sum[policy][k] += profile
-                replicate_profiles[policy][k].append(profile.copy())
                 metrics = profile_metrics(profile)
                 estimated_region = profile >= (0.5 * np.max(profile)) if np.max(profile) else np.zeros(m, bool)
                 jaccard = jaccard_similarity(estimated_region, truth_mask)
@@ -625,14 +651,8 @@ def run_case(
                     }
                 )
 
-        # All selection policies preserve selection mass K except include_all.
-        for policy in TIE_POLICIES:
-            for k in k_values:
-                total = float(h_replicate[policy][k].sum())
-                replicate_profiles[policy][k][-1] = h_replicate[policy][k].copy()
         # T and truth are accumulated once per sample ensemble, not per K.
 
-    profile_rows = []
     summary_rows = []
     for policy in TIE_POLICIES:
         for k in k_values:
@@ -682,8 +702,7 @@ def run_case(
                 }
             )
             for rank in range(m):
-                profile_rows.append(
-                    {
+                profile_row = {
                         "scenario": case_name,
                         "case_id": case_id,
                         "m": m,
@@ -696,9 +715,26 @@ def run_case(
                         "T_hat": topology_profile[rank],
                         "true_region_frequency": truth_sum[rank] / replicate_count,
                     }
-                )
+                profile_writer.write(profile_row)
+                if (
+                    case_name == "cluster_anomaly"
+                    and m == 512
+                    and k == 20
+                    and policy == "fractional"
+                    and np.isclose(epsilon, 0.05)
+                ):
+                    profile_examples.append(profile_row)
 
-    return realization_rows, bar_rows, filtration_rows, profile_rows, summary_rows
+    barcode_writer.flush()
+    filtration_writer.flush()
+    profile_writer.flush()
+    return (
+        realization_rows,
+        barcode_examples,
+        filtration_examples,
+        profile_examples,
+        summary_rows,
+    )
 
 
 def generate_target_quantile(scenario_name: str, params: dict) -> float:
@@ -800,6 +836,123 @@ def aggregate_final(realization_rows: list[dict], summary_rows: list[dict]) -> l
         summary["mean_diagram_wasserstein1"] = (
             float(np.nanmean(diagram_values)) if np.isfinite(diagram_values).any() else np.nan
         )
+    return summary_rows
+
+
+def postprocess_realizations_streaming(
+    pending_path: Path,
+    output_path: Path,
+    summary_rows: list[dict],
+) -> list[dict]:
+    """Calcula p-values e agregados lendo realizações sem carregá-las na RAM."""
+    null_groups: dict[tuple, list[tuple[int, float]]] = {}
+    with pending_path.open("r", newline="", encoding="utf-8") as source:
+        for row in csv.DictReader(source):
+            if row["scenario"] == "uniform":
+                key = (
+                    int(row["m"]), float(row["epsilon"]), int(row["K"]),
+                    row["tie_policy"],
+                )
+                null_groups.setdefault(key, []).append(
+                    (int(row["replicate"]), float(row["JS_selection_uniform"]))
+                )
+
+    aggregators: dict[tuple, dict] = {}
+    with pending_path.open("r", newline="", encoding="utf-8") as source, \
+            output_path.open("w", newline="", encoding="utf-8") as target:
+        reader = csv.DictReader(source)
+        fieldnames = list(reader.fieldnames or []) + [
+            "pvalue_JS_uniform_null", "detected_alpha_0.05"
+        ]
+        writer = csv.DictWriter(target, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+
+        for row in reader:
+            key = (
+                int(row["m"]), float(row["epsilon"]), int(row["K"]),
+                row["tie_policy"],
+            )
+            score = float(row["JS_selection_uniform"])
+            null_values = null_groups.get(key, [])
+            if row["scenario"] == "uniform":
+                replicate = int(row["replicate"])
+                null_values = [item for item in null_values if item[0] != replicate]
+            if null_values:
+                pvalue = (1 + sum(value >= score for _, value in null_values)) / (
+                    len(null_values) + 1
+                )
+            else:
+                pvalue = np.nan
+            detected = int(pvalue < ALPHA) if np.isfinite(pvalue) else 0
+            row["pvalue_JS_uniform_null"] = pvalue
+            row["detected_alpha_0.05"] = detected
+            writer.writerow(row)
+
+            summary_key = (
+                row["scenario"], row["case_id"], int(row["m"]),
+                float(row["epsilon"]), int(row["K"]), row["tie_policy"],
+            )
+            agg = aggregators.setdefault(
+                summary_key,
+                {
+                    "detections": [], "pvalues": [], "peak_errors": [],
+                    "selection_jaccards": [], "delta_pi": [], "diagram_distances": [],
+                    "topology_region_jaccard": np.nan,
+                },
+            )
+            agg["detections"].append(detected)
+            agg["pvalues"].append(pvalue)
+            for field, target_field in (
+                ("peak_error", "peak_errors"),
+                ("selection_region_jaccard", "selection_jaccards"),
+                ("delta_pi_perturbation", "delta_pi"),
+                ("diagram_wasserstein1_perturbation", "diagram_distances"),
+            ):
+                agg[target_field].append(float(row[field]))
+            if not np.isfinite(agg["topology_region_jaccard"]):
+                value = float(row["topology_region_jaccard"])
+                if np.isfinite(value):
+                    agg["topology_region_jaccard"] = value
+
+    for summary in summary_rows:
+        summary_key = (
+            summary["scenario"], summary["case_id"], summary["m"],
+            summary["epsilon"], summary["K"], summary["tie_policy"],
+        )
+        agg = aggregators.get(summary_key)
+        if not agg:
+            summary["power_or_type1_rate"] = np.nan
+            summary["pvalue_JS_mean"] = np.nan
+            summary["peak_error_mean"] = np.nan
+            summary["peak_error_max"] = np.nan
+            summary["peak_error_std"] = np.nan
+            summary["mean_selection_jaccard"] = np.nan
+            summary["topology_region_jaccard"] = np.nan
+            summary["mean_perturbation_delta_pi"] = np.nan
+            summary["mean_diagram_wasserstein1"] = np.nan
+            continue
+
+        def finite_values(name):
+            values = np.asarray(agg[name], dtype=float)
+            return values[np.isfinite(values)]
+
+        summary["power_or_type1_rate"] = float(np.mean(agg["detections"]))
+        values = finite_values("pvalues")
+        summary["pvalue_JS_mean"] = float(values.mean()) if len(values) else np.nan
+        values = finite_values("peak_errors")
+        summary["peak_error_mean"] = float(values.mean()) if len(values) else np.nan
+        summary["peak_error_max"] = float(values.max()) if len(values) else np.nan
+        summary["peak_error_std"] = (
+            float(values.std(ddof=1)) if len(values) > 1 else np.nan
+        )
+        values = finite_values("selection_jaccards")
+        summary["mean_selection_jaccard"] = float(values.mean()) if len(values) else np.nan
+        summary["topology_region_jaccard"] = agg["topology_region_jaccard"]
+        values = finite_values("delta_pi")
+        summary["mean_perturbation_delta_pi"] = float(values.mean()) if len(values) else np.nan
+        values = finite_values("diagram_distances")
+        summary["mean_diagram_wasserstein1"] = float(values.mean()) if len(values) else np.nan
+
     return summary_rows
 
 
@@ -1177,10 +1330,14 @@ def main():
         f"amostras por ensemble={samples_per_ensemble}; m={m_values}; K={k_values}"
     )
 
-    all_realizations = []
-    all_barcodes = []
-    all_filtration = []
-    all_profiles = []
+    pending_realizations_path = output_dir / "realizations_pending.csv"
+    barcode_writer = CsvStreamWriter(output_dir / "h0_barcodes.csv")
+    filtration_writer = CsvStreamWriter(output_dir / "beta0_filtration.csv")
+    profile_writer = CsvStreamWriter(output_dir / "rank_profiles.csv")
+    pending_realizations_writer = CsvStreamWriter(pending_realizations_path)
+    barcode_examples = []
+    filtration_examples = []
+    profile_examples = []
     all_summaries = []
     completed = 0
 
@@ -1197,18 +1354,22 @@ def main():
                     replicate_count,
                     samples_per_ensemble,
                     perturb=not args.skip_perturbation,
+                    barcode_writer=barcode_writer,
+                    filtration_writer=filtration_writer,
+                    profile_writer=profile_writer,
                 )
                 (
                     realization_rows,
-                    barcode_rows,
-                    filtration_rows,
-                    profile_rows,
+                    case_barcode_examples,
+                    case_filtration_examples,
+                    case_profile_examples,
                     summary_rows,
                 ) = result
-                all_realizations.extend(realization_rows)
-                all_barcodes.extend(barcode_rows)
-                all_filtration.extend(filtration_rows)
-                all_profiles.extend(profile_rows)
+                for row in realization_rows:
+                    pending_realizations_writer.write(row)
+                barcode_examples.extend(case_barcode_examples)
+                filtration_examples.extend(case_filtration_examples)
+                profile_examples.extend(case_profile_examples)
                 all_summaries.extend(summary_rows)
                 completed += 1
                 print(
@@ -1216,18 +1377,27 @@ def main():
                     f"m={m}, eps={epsilon:g}"
                 )
 
-    add_empirical_null_pvalues(all_realizations)
-    all_summaries = aggregate_final(all_realizations, all_summaries)
-    save_dict_rows(output_dir / "realizations.csv", all_realizations)
-    save_dict_rows(output_dir / "h0_barcodes.csv", all_barcodes)
-    save_dict_rows(output_dir / "beta0_filtration.csv", all_filtration)
-    save_dict_rows(output_dir / "rank_profiles.csv", all_profiles)
+    for writer in (
+        barcode_writer,
+        filtration_writer,
+        profile_writer,
+        pending_realizations_writer,
+    ):
+        writer.flush()
+        writer.close()
+
+    all_summaries = postprocess_realizations_streaming(
+        pending_realizations_path,
+        output_dir / "realizations.csv",
+        all_summaries,
+    )
+    pending_realizations_path.unlink(missing_ok=True)
     save_dict_rows(output_dir / "summary.csv", all_summaries)
     model_rows = fit_detectability_models(all_summaries)
     save_dict_rows(output_dir / "detectability_logistic.csv", model_rows)
-    plot_results(output_dir, all_summaries, all_profiles)
-    plot_barcode_example(output_dir, all_barcodes)
-    plot_beta0_example(output_dir, all_filtration)
+    plot_results(output_dir, all_summaries, profile_examples)
+    plot_barcode_example(output_dir, barcode_examples)
+    plot_beta0_example(output_dir, filtration_examples)
     print(f"Resultados e gráficos em: {output_dir.resolve()}")
 
 

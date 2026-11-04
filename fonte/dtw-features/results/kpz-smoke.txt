@@ -1,0 +1,73 @@
+Teste de equivalencia DTW / LPP e pertencimento KPZ
+n=[8, 16, 32]  eval=30  pilot=30  bootstrap=19  alpha=0.0100  custo=ABS  pesos=POISSON  seq=UNIFORM  fios=4  tempo=0.2s
+TW2 numerico media=-1.7711 var=0.8132 assim=0.2241 | W1(TW2*,N)=0.0362 W1(TW2*,TW1*)=0.0113 eps=0.0056
+Escala teorica LPP: (L-4n)/(2^(4/3) n^(1/3)) -> TW2. DTW usa studentizacao independente do piloto.
+
+
+LPP expoente de flutuacao
+LPP  theta=0.3360  IC[0.2465, 0.5991]  decisao=INCONCLUSIVO  (KPZ 1/3, CLT 1/2)
+  s(16)/s(8)=1.3536 IC[1.1341, 1.9663]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  s(32)/s(16)=1.1771 IC[0.7909, 1.8163]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  media ≈ 3.944549 * n + -6.584804 * n^(1/3) + 6.013216
+  variancia ≈ -5.011853 * n^(2/3) + 40.713087 * n^(1/3) + -50.096003
+  n=8  assim=1.395 IC[-0.456, 1.868] (TW2 0.224)  curtose=3.687  AD=0.900  p=0.5600  PASSA
+  controle Johansson n=8  mediaZ=-1.561 sdZ=0.809 AD=1.545 p=0.2000 COMPATIVEL
+  n=16  assim=0.471 IC[-0.444, 1.082] (TW2 0.224)  curtose=0.831  AD=2.400  p=0.1800  PASSA
+  controle Johansson n=16  mediaZ=-1.722 sdZ=0.430 AD=3.317 p=0.0400 FALHA_ESCALA
+  n=32  assim=0.988 IC[-0.142, 1.496] (TW2 0.224)  curtose=0.873  AD=5.242  p=0.0400  PASSA
+  controle Johansson n=32  mediaZ=-1.629 sdZ=0.828 AD=0.796 p=0.6000 COMPATIVEL
+  pertencimento KPZ (margem + expoentes): INCONCLUSIVO
+
+LPP3 expoente de flutuacao
+LPP3  theta=0.0668  IC[-0.1383, 0.4278]  decisao=PASSA  (KPZ 1/3, CLT 1/2)
+  s(16)/s(8)=0.9776 IC[0.6555, 1.4283]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  s(32)/s(16)=1.1221 IC[0.7579, 2.0761]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  media ≈ 4.049486 * n + -9.097426 * n^(1/3) + 10.532294
+  variancia ≈ 7.584686 * n^(2/3) + -35.917803 * n^(1/3) + 60.733641
+  n=8  assim=0.186 IC[-0.307, 0.850] (TW2 0.224)  curtose=-0.636  AD=5.340  p=0.0400  PASSA
+  n=16  assim=0.971 IC[0.261, 1.867] (TW2 0.224)  curtose=0.177  AD=1.366  p=0.4000  PASSA
+  n=32  assim=0.279 IC[-0.289, 1.008] (TW2 0.224)  curtose=-0.808  AD=3.840  p=0.2000  PASSA
+  pertencimento KPZ (margem + expoentes): COMPATIVEL_MARGEM_PONTO_A_PONTO
+
+FPP3 expoente de flutuacao
+FPP3  theta=0.2819  IC[0.0363, 0.4280]  decisao=PASSA  (KPZ 1/3, CLT 1/2)
+  s(16)/s(8)=1.1458 IC[0.8728, 1.6945]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  s(32)/s(16)=1.2900 IC[1.1157, 1.8486]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  media ≈ 0.139879 * n + 2.079412 * n^(1/3) + -0.211191
+  variancia ≈ 2.052629 * n^(2/3) + -7.287564 * n^(1/3) + 9.670360
+  n=8  assim=1.347 IC[0.703, 1.938] (TW2 0.224)  curtose=1.601  AD=10.782  p=0.0200  PASSA
+  n=16  assim=0.459 IC[-0.066, 1.220] (TW2 0.224)  curtose=-0.047  AD=1.126  p=0.4000  PASSA
+  n=32  assim=0.837 IC[0.263, 1.521] (TW2 0.224)  curtose=0.517  AD=2.754  p=0.1400  PASSA
+  pertencimento KPZ (margem + expoentes): COMPATIVEL_MARGEM_PONTO_A_PONTO
+
+DTW expoente de flutuacao
+DTW  theta=0.2140  IC[-0.0789, 0.4269]  decisao=PASSA  (KPZ 1/3, CLT 1/2)
+  s(16)/s(8)=1.5590 IC[1.2678, 2.7388]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  s(32)/s(16)=0.8630 IC[0.5834, 1.0312]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  media ≈ 0.065273 * n + 2.056453 * n^(1/3) + -2.904490
+  variancia ≈ -0.680251 * n^(2/3) + 3.669115 * n^(1/3) + -4.401183
+  n=8  assim=0.581 IC[-0.607, 1.212] (TW2 0.224)  curtose=1.493  AD=1.336  p=0.4600  PASSA
+  n=16  assim=0.009 IC[-0.375, 0.510] (TW2 0.224)  curtose=-0.605  AD=1.075  p=0.5600  PASSA
+  n=32  assim=0.421 IC[-0.614, 1.012] (TW2 0.224)  curtose=-0.000  AD=2.783  p=0.1400  PASSA
+  pertencimento KPZ (margem + expoentes): COMPATIVEL_MARGEM_PONTO_A_PONTO
+
+equivalencia DTW vs LPP
+  n=8  W1=0.4020  UCB=0.9492  eps=0.0056  NAO_EQUIVALENTE
+  n=16  W1=0.2446  UCB=0.5342  eps=0.0056  NAO_EQUIVALENTE
+  n=32  W1=0.3142  UCB=0.8744  eps=0.0056  NAO_EQUIVALENTE
+  extrapolacao W1(inf)=0.1104 UCB=1.3977 eps=0.0056  NAO_EQUIVALENTE
+  (W1(inf) e o intercepto de W1(n)=W1(inf)+c n^(-1/3); UCB bootstrap percentil)
+
+equivalencia DTW vs FPP3
+  n=8  W1=0.9152  UCB=1.3302  eps=0.0056  NAO_EQUIVALENTE
+  n=16  W1=0.4327  UCB=0.6862  eps=0.0056  NAO_EQUIVALENTE
+  n=32  W1=0.7574  UCB=1.0854  eps=0.0056  NAO_EQUIVALENTE
+  extrapolacao W1(inf)=0.2914 UCB=1.4943 eps=0.0056  NAO_EQUIVALENTE
+  (W1(inf) e o intercepto de W1(n)=W1(inf)+c n^(-1/3); UCB bootstrap percentil)
+
+equivalencia FPP3 vs LPP
+  n=8  W1=0.6147  UCB=0.8858  eps=0.0056  NAO_EQUIVALENTE
+  n=16  W1=0.5496  UCB=0.8384  eps=0.0056  NAO_EQUIVALENTE
+  n=32  W1=0.8897  UCB=1.5725  eps=0.0056  NAO_EQUIVALENTE
+  extrapolacao W1(inf)=1.2487 UCB=2.3235 eps=0.0056  NAO_EQUIVALENTE
+  (W1(inf) e o intercepto de W1(n)=W1(inf)+c n^(-1/3); UCB bootstrap percentil)

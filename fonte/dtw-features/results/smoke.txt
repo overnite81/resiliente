@@ -1,0 +1,63 @@
+Teste de equivalencia DTW / LPP e pertencimento KPZ
+n=[32, 64, 128]  eval=40  pilot=40  bootstrap=39  alpha=0.0100  custo=ABS  fios=4  tempo=1.2s
+TW2 numerico media=-1.7711 var=0.8132 assim=0.2241 | W1(TW2*,N)=0.0362 W1(TW2*,TW1*)=0.0113 eps=0.0056
+Escala teorica LPP: (L-4n)/(2^(4/3) n^(1/3)) -> TW2. DTW usa studentizacao independente do piloto.
+
+
+LPP expoente de flutuacao
+LPP  theta=0.3772  IC[0.1236, 0.6780]  decisao=INCONCLUSIVO  (KPZ 1/3, CLT 1/2)
+  s(64)/s(32)=1.6832 IC[1.1437, 2.6074]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  s(128)/s(64)=1.0022 IC[0.7506, 1.4252]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  media ≈ 3.996328 * n + -2.972868 * n^(1/3) + -5.542974
+  variancia ≈ -39.423990 * n^(2/3) + 356.771228 * n^(1/3) + -702.040197
+  n=32  assim=0.132 IC[-0.738, 0.603] (TW2 0.224)  curtose=0.218  AD=2.102  p=0.3200  PASSA
+  controle Johansson n=32  mediaZ=-1.716 sdZ=0.852 AD=0.788 p=0.5400 COMPATIVEL
+  n=64  assim=0.443 IC[-0.280, 1.016] (TW2 0.224)  curtose=-0.254  AD=1.008  p=0.7000  PASSA
+  controle Johansson n=64  mediaZ=-1.576 sdZ=0.832 AD=1.064 p=0.3400 COMPATIVEL
+  n=128  assim=-0.027 IC[-0.497, 0.410] (TW2 0.224)  curtose=-0.937  AD=3.415  p=0.1400  PASSA
+  controle Johansson n=128  mediaZ=-1.736 sdZ=1.064 AD=1.344 p=0.3200 COMPATIVEL
+  geodesico theta=0.8114 IC[0.6064, 1.0240] decisao=PASSA (KPZ 2/3)
+  pertencimento KPZ (margem + expoentes): INCONCLUSIVO
+
+FPP3 expoente de flutuacao
+FPP3  theta=0.0259  IC[-0.3135, 0.3643]  decisao=PASSA  (KPZ 1/3, CLT 1/2)
+  s(64)/s(32)=0.9640 IC[0.7334, 1.6326]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  s(128)/s(64)=1.0753 IC[0.7131, 1.4619]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  media ≈ 0.361430 * n + -0.116325 * n^(1/3) + 3.632682
+  variancia ≈ 0.620442 * n^(2/3) + -4.891325 * n^(1/3) + 14.409318
+  n=32  assim=-0.194 IC[-0.569, 0.383] (TW2 0.224)  curtose=-0.480  AD=3.169  p=0.1600  PASSA
+  n=64  assim=-0.296 IC[-0.880, 0.228] (TW2 0.224)  curtose=-0.338  AD=0.263  p=0.9400  PASSA
+  n=128  assim=0.586 IC[-0.024, 1.245] (TW2 0.224)  curtose=-0.397  AD=0.962  p=0.5400  PASSA
+  geodesico theta=0.9724 IC[0.7684, 1.2212] decisao=FALHA (KPZ 2/3)
+  pertencimento KPZ (margem + expoentes): FORA
+
+DTW expoente de flutuacao
+DTW  theta=0.3517  IC[0.1817, 0.6392]  decisao=INCONCLUSIVO  (KPZ 1/3, CLT 1/2)
+  s(64)/s(32)=1.1895 IC[0.7884, 1.4600]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  s(128)/s(64)=1.3690 IC[1.0504, 1.9040]  alvo 2^(1/3)=1.2599  CLT sqrt(2)=1.4142
+  media ≈ 0.520575 * n + 3.997360 * n^(1/3) + -6.919116
+  variancia ≈ 3.701082 * n^(2/3) + -21.502041 * n^(1/3) + 41.008756
+  n=32  assim=0.729 IC[-1.243, 2.036] (TW2 0.224)  curtose=2.170  AD=0.900  p=0.5600  PASSA
+  n=64  assim=0.552 IC[-0.190, 1.295] (TW2 0.224)  curtose=-0.241  AD=0.617  p=0.7600  PASSA
+  n=128  assim=0.580 IC[-0.567, 1.194] (TW2 0.224)  curtose=0.479  AD=1.462  p=0.3400  PASSA
+  geodesico theta=0.7220 IC[0.4243, 0.9561] decisao=INCONCLUSIVO (KPZ 2/3)
+  pertencimento KPZ (margem + expoentes): INCONCLUSIVO
+
+equivalencia DTW vs LPP
+  n=32  W1=0.4462  UCB=0.4082  eps=0.0056  NAO_EQUIVALENTE
+  n=64  W1=0.1494  UCB=0.3000  eps=0.0056  NAO_EQUIVALENTE
+  n=128  W1=0.5221  UCB=0.3846  eps=0.0056  NAO_EQUIVALENTE
+  extrapolacao W1(inf)=0.4818 UCB=0.5130 eps=0.0056  NAO_EQUIVALENTE
+  (W1(inf) e o intercepto de W1(n)=W1(inf)+c n^(-1/3); UCB bootstrap percentil)%n
+equivalencia DTW vs FPP3
+  n=32  W1=0.3917  UCB=0.3937  eps=0.0056  NAO_EQUIVALENTE
+  n=64  W1=0.1852  UCB=0.3665  eps=0.0056  NAO_EQUIVALENTE
+  n=128  W1=0.3418  UCB=0.3662  eps=0.0056  NAO_EQUIVALENTE
+  extrapolacao W1(inf)=0.1674 UCB=0.4766 eps=0.0056  NAO_EQUIVALENTE
+  (W1(inf) e o intercepto de W1(n)=W1(inf)+c n^(-1/3); UCB bootstrap percentil)%n
+equivalencia FPP3 vs LPP
+  n=32  W1=0.6469  UCB=0.3387  eps=0.0056  NAO_EQUIVALENTE
+  n=64  W1=0.2470  UCB=0.3834  eps=0.0056  NAO_EQUIVALENTE
+  n=128  W1=0.3687  UCB=0.3590  eps=0.0056  NAO_EQUIVALENTE
+  extrapolacao W1(inf)=-0.2274 UCB=0.7450 eps=0.0056  NAO_EQUIVALENTE
+  (W1(inf) e o intercepto de W1(n)=W1(inf)+c n^(-1/3); UCB bootstrap percentil)%n
