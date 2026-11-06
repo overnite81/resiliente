@@ -52,7 +52,22 @@ Opções:
 | `--seq-dist` | `NORMAL` | distribuição das sequências do DTW |
 | `--no-geodesic` | geodésico ligado | não estima o expoente transversal 2/3 |
 | `--out` | `results/kpz-equivalence.csv` | CSV de saída (o `.txt` sai ao lado) |
+| `--checkpoint-dir` | `results/kpz-checkpoints` | arquivos binários de progresso retomável |
+| `--checkpoint-every` | `100` | grava em disco e informa progresso a cada N realizações; use `1` para cada realização |
 | `--check` | — | valida TW e os núcleos e sai |
+
+## Execução em instâncias preemptíveis (Azure Spot)
+
+Cada modelo, tamanho e fase (`pilot`/`eval`) tem um checkpoint separado. As realizações concluídas são sincronizadas em disco a cada `--checkpoint-every`; ao reiniciar com os mesmos parâmetros, o programa carrega as concluídas e simula apenas as faltantes. O identificador do checkpoint valida n, fase, número de amostras, seed, custo, distribuições e geodésico; para mudar esses parâmetros, use outro diretório de checkpoints. Aponte `--checkpoint-dir` para um disco persistente montado na VM (o armazenamento efêmero da Spot não sobrevive à desalocação).
+
+Exemplo, com o diretório ajustado para o caminho do disco persistente:
+
+```bash
+./run.sh --n 64,128,256,512,1024 --replicates 5000 --pilot 2000 --bootstrap 399 \
+  --weight-dist EXPONENTIAL --seq-dist NORMAL \
+  --checkpoint-dir /mnt/azure-persistent/kpz-checkpoints --checkpoint-every 100 \
+  --out results/kpz-equivalence.csv
+```
 
 ## Saídas
 

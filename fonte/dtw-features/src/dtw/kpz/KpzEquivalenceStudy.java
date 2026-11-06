@@ -6,6 +6,8 @@ import dtw.kpz.DirectedPassage.Outcome;
 import dtw.kpz.Distribution;
 
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,6 +21,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.CRC32;
 
 
 /**
@@ -328,7 +332,7 @@ public final class KpzEquivalenceStudy {
     }
 
     private static Bundle simulateBundle(Model model, int n, Config cfg, ExecutorService pool)
-            throws ExecutionException, InterruptedException {
+            throws ExecutionException, InterruptedException, IOException {
         Bundle b = new Bundle();
         b.n = n;
         b.model = model;
@@ -338,8 +342,10 @@ public final class KpzEquivalenceStudy {
         b.features = model == Model.DTW ? new double[4][cfg.replicates] : null;
         b.mid = cfg.geodesic ? new double[cfg.replicates] : null;
         long cells0 = System.nanoTime();
-        runRange(model, n, cfg.seed, 0, b.pilot, null, b.pilotFeatures, false, cfg.cost, cfg.weightDist, cfg.seqDist, pool);
-        runRange(model, n, cfg.seed, 1 << 30, b.eval, b.mid, b.features, cfg.geodesic, cfg.cost, cfg.weightDist, cfg.seqDist, pool);
+        runRange(model, n, "pilot", cfg.seed, 0, b.pilot, null, b.pilotFeatures, false,
+                cfg, pool);
+        runRange(model, n, "eval", cfg.seed, 1 << 30, b.eval, b.mid, b.features, cfg.geodesic,
+                cfg, pool);
         b.seconds = (System.nanoTime() - cells0) / 1e9;
         b.pilotMean = EmpiricalStats.mean(b.pilot);
         b.pilotSd = EmpiricalStats.sd(b.pilot);
@@ -349,35 +355,64 @@ public final class KpzEquivalenceStudy {
         return b;
     }
 
-    private static void runRange(Model model, int n, long seed, int offset, double[] values,
-                                 double[] mids, double[][] features, boolean geodesic, Cost cost,
-                                 Distribution weightDist, Distribution seqDist,
-                                 ExecutorService pool)
-            throws ExecutionException, InterruptedException {
+    private static void runRange(Model model, int n, String phase, long seed, int offset,
+                                 double[] values, double[] mids, double[][] features,
+                                 boolean geodesic, Config cfg, ExecutorService pool)
+            throws ExecutionException, InterruptedException, IOException {
         int reps = values.length;
-        int batches = Math.max(1, Runtime.getRuntime().availableProcessors() * 2);
-        List<Future<?>> futures = new ArrayList<>(batches);
-        for (int b = 0; b < batches; b++) {
-            int start = (int) ((long) b * reps / batches);
-            int end = (int) ((long) (b + 1) * reps / batches);
-            futures.add(pool.submit(() -> {
-                for (int r = start; r < end; r++) {
-                    Outcome o = DirectedPassage.simulate(model, n, seed, offset + r, geodesic, cost, weightDist, seqDist);
-                    values[r] = o.value;
-                    if (mids != null) {
-                        mids[r] = o.midColumn - 0.5 * (n - 1);
+        String identity = String.join("|", model.name(), Integer.toString(n), phase,
+                Integer.toString(offset), Integer.toString(reps), Long.toString(seed),
+                cfg.cost.name(), cfg.weightDist.name(), cfg.seqDist.name(),
+                Boolean.toString(geodesic), Boolean.toString(mids != null),
+                features == null ? "0" : Integer.toString(features.length));
+        Path directory = Path.of(cfg.checkpointDir);
+        Files.createDirectories(directory);
+        Path path = directory.resolve(model.name().toLowerCase(Locale.ROOT) + "-n" + n
+                + "-" + phase + ".bin");
+        try (CheckpointStore checkpoint = new CheckpointStore(path, identity, values, mids, features)) {
+            int resumed = checkpoint.completedCount();
+            int pending = reps - resumed;
+            System.err.printf(Locale.US,
+                    "checkpoint %s n=%d fase=%s recuperadas=%d/%d arquivo=%s%n",
+                    model, n, phase, resumed, reps, path.toAbsolutePath());
+            if (pending == 0) return;
+
+            int batches = Math.max(1, Runtime.getRuntime().availableProcessors() * 2);
+            List<Future<?>> futures = new ArrayList<>(batches);
+            AtomicInteger completed = new AtomicInteger();
+            for (int b = 0; b < batches; b++) {
+                int start = (int) ((long) b * reps / batches);
+                int end = (int) ((long) (b + 1) * reps / batches);
+                futures.add(pool.submit(() -> {
+                    try {
+                        for (int r = start; r < end; r++) {
+                            if (checkpoint.isDone(r)) continue;
+                            Outcome o = DirectedPassage.simulate(model, n, seed, offset + r,
+                                    geodesic, cfg.cost, cfg.weightDist, cfg.seqDist);
+                            double mid = mids == null ? 0.0 : o.midColumn - 0.5 * (n - 1);
+                            double[] featureRow = features == null ? null :
+                                    new double[] {o.mX, o.mY, o.w1xy, o.emparelhado};
+                            checkpoint.write(r, o.value, mid, featureRow);
+                            int count = completed.incrementAndGet();
+                            if (count % cfg.checkpointEvery == 0 || count == pending) {
+                                checkpoint.force();
+                                System.err.printf(Locale.US,
+                                        "checkpoint %s n=%d fase=%s novas=%d/%d total=%d/%d%n",
+                                        model, n, phase, count, pending, resumed + count, reps);
+                            }
+                        }
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
                     }
-                    if (features != null) {
-                        features[0][r] = o.mX;
-                        features[1][r] = o.mY;
-                        features[2][r] = o.w1xy;
-                        features[3][r] = o.emparelhado;
-                    }
-                }
             }));
-        }
-        for (Future<?> f : futures) {
-            f.get();
+            }
+            for (Future<?> f : futures) f.get();
+            checkpoint.force();
+            if (completed.get() % cfg.checkpointEvery != 0 && completed.get() != pending) {
+                System.err.printf(Locale.US,
+                        "checkpoint %s n=%d fase=%s novas=%d/%d total=%d/%d persistido%n",
+                        model, n, phase, completed.get(), pending, resumed + completed.get(), reps);
+            }
         }
     }
 
@@ -948,6 +983,8 @@ public final class KpzEquivalenceStudy {
                 "  --seq-dist EXPONENTIAL|NORMAL|POISSON|UNIFORM",
                 "                          sequencias do DTW (default NORMAL)",
                 "  --no-geodesic           nao estima o expoente transversal",
+                "  --checkpoint-dir DIR    diretorio para checkpoints retomaveis",
+                "  --checkpoint-every N    forca progresso a cada N realizacoes (default 100)",
                 "  --out results/kpz-equivalence.csv",
                 "  --check                 valida TW2/TW1 e os nucleos; sai em seguida",
                 "",
@@ -970,6 +1007,8 @@ public final class KpzEquivalenceStudy {
         boolean geodesic = true;
         boolean checkOnly = false;
         boolean refreshConcluded = false;
+        String checkpointDir = "results/kpz-checkpoints";
+        int checkpointEvery = 100;
         Cost cost = Cost.ABS;
         Distribution weightDist = Distribution.EXPONENTIAL;
         Distribution seqDist = Distribution.NORMAL;
@@ -1013,6 +1052,12 @@ public final class KpzEquivalenceStudy {
                     case "--out":
                         c.outCsv = next(args, ++i);
                         break;
+                    case "--checkpoint-dir":
+                        c.checkpointDir = next(args, ++i);
+                        break;
+                    case "--checkpoint-every":
+                        c.checkpointEvery = Integer.parseInt(next(args, ++i));
+                        break;
                     case "--no-geodesic":
                         c.geodesic = false;
                         break;
@@ -1039,6 +1084,9 @@ public final class KpzEquivalenceStudy {
             }
             if (c.replicates < 30 || c.pilot < 30) {
                 throw new IllegalArgumentException("replicates e pilot >= 30");
+            }
+            if (c.checkpointEvery < 1) {
+                throw new IllegalArgumentException("checkpoint-every >= 1");
             }
             if (!(c.alpha > 0.0 && c.alpha < 0.5)) {
                 throw new IllegalArgumentException("alpha em (0, 0.5)");
@@ -1070,6 +1118,129 @@ public final class KpzEquivalenceStudy {
                 ns[i] = Integer.parseInt(p[i].trim());
             }
             return ns;
+        }
+    }
+
+    private static final class CheckpointStore implements AutoCloseable {
+        private static final int MAGIC = 0x4B505A43;
+        private static final int VERSION = 2;
+        private final RandomAccessFile file;
+        private final boolean[] done;
+        private final double[] values;
+        private final double[] mids;
+        private final double[][] features;
+        private final int featureCount;
+        private final boolean hasMids;
+        private final long recordsStart;
+        private final int recordBytes;
+        private int completed;
+
+        CheckpointStore(Path path, String identity, double[] targetValues, double[] targetMids,
+                        double[][] targetFeatures) throws IOException {
+            values = targetValues;
+            mids = targetMids;
+            features = targetFeatures;
+            featureCount = features == null ? 0 : features.length;
+            hasMids = mids != null;
+            done = new boolean[values.length];
+            recordBytes = 8 + 8 + featureCount * 8 + 4 + 1;
+            file = new RandomAccessFile(path.toFile(), "rw");
+            if (file.length() == 0) {
+                file.writeInt(MAGIC);
+                file.writeInt(VERSION);
+                file.writeUTF(identity);
+                file.writeInt(values.length);
+                file.writeInt(featureCount);
+                file.writeBoolean(hasMids);
+                recordsStart = file.getFilePointer();
+                file.setLength(recordsStart + (long) recordBytes * values.length);
+                file.getChannel().force(true);
+            } else {
+                if (file.readInt() != MAGIC || file.readInt() != VERSION) {
+                    file.close();
+                    throw new IOException("checkpoint invalido: " + path);
+                }
+                String savedIdentity = file.readUTF();
+                int savedReps = file.readInt();
+                int savedFeatures = file.readInt();
+                boolean savedMids = file.readBoolean();
+                recordsStart = file.getFilePointer();
+                long expectedLength = recordsStart + (long) recordBytes * values.length;
+                if (!identity.equals(savedIdentity) || savedReps != values.length
+                        || savedFeatures != featureCount || savedMids != hasMids
+                        || file.length() != expectedLength) {
+                    file.close();
+                    throw new IOException("parametros/checkpoint incompativeis: " + path
+                            + " (use outro --checkpoint-dir ou remova o checkpoint)");
+                }
+                for (int i = 0; i < values.length; i++) {
+                    file.seek(recordsStart + (long) i * recordBytes);
+                    double value = file.readDouble();
+                    double mid = file.readDouble();
+                    double[] row = featureCount == 0 ? null : new double[featureCount];
+                    for (int f = 0; f < featureCount; f++) row[f] = file.readDouble();
+                    int savedCrc = file.readInt();
+                    boolean saved = file.readBoolean();
+                    if (saved && savedCrc == checksum(value, mid, row)) {
+                        values[i] = value;
+                        if (mids != null) mids[i] = mid;
+                        if (features != null) {
+                            for (int f = 0; f < featureCount; f++) features[f][i] = row[f];
+                        }
+                        done[i] = true;
+                        completed++;
+                    }
+                }
+            }
+        }
+
+        synchronized boolean isDone(int index) {
+            return done[index];
+        }
+
+        synchronized int completedCount() {
+            return completed;
+        }
+
+        synchronized void write(int index, double value, double mid, double[] row) throws IOException {
+            if (done[index]) return;
+            file.seek(recordsStart + (long) index * recordBytes);
+            file.writeDouble(value);
+            file.writeDouble(mid);
+            for (int f = 0; f < featureCount; f++) file.writeDouble(row[f]);
+            file.writeInt(checksum(value, mid, row));
+            file.writeBoolean(true);
+            values[index] = value;
+            if (mids != null) mids[index] = mid;
+            if (features != null) {
+                for (int f = 0; f < featureCount; f++) features[f][index] = row[f];
+            }
+            done[index] = true;
+            completed++;
+        }
+
+        private static int checksum(double value, double mid, double[] row) {
+            CRC32 crc = new CRC32();
+            updateLong(crc, Double.doubleToLongBits(value));
+            updateLong(crc, Double.doubleToLongBits(mid));
+            if (row != null) {
+                for (double feature : row) updateLong(crc, Double.doubleToLongBits(feature));
+            }
+            return (int) crc.getValue();
+        }
+
+        private static void updateLong(CRC32 crc, long value) {
+            for (int shift = 56; shift >= 0; shift -= 8) crc.update((int) (value >>> shift) & 0xff);
+        }
+
+        synchronized void force() throws IOException {
+            file.getChannel().force(true);
+        }
+
+        @Override
+        public synchronized void close() throws IOException {
+            file.getChannel().force(true);
+            file.close();
         }
     }
 
