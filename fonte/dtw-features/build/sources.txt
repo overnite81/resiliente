@@ -4,5 +4,7 @@ src/dtw/kpz/DirectedPassage.java
 src/dtw/kpz/Distribution.java
 src/dtw/kpz/EmpiricalStats.java
 src/dtw/kpz/KpzEquivalenceStudy.java
+src/dtw/kpz/MechanismStudy.java
+src/dtw/kpz/SeparablePath.java
 src/dtw/kpz/TracyWidom.java
 src/dtw/kpz/Xoroshiro128.java
