@@ -1,0 +1,160 @@
+Teste de equivalencia DTW / LPP e pertencimento KPZ
+n=[64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]  eval=5000  pilot=2000  bootstrap=399  alpha=0.0100  custo=ABS  pesos=EXPONENTIAL  seq=EXPONENTIAL  fios=2  tempo=41183.3s
+TW2 numerico media=-1.7711 var=0.8132 assim=0.2241 | W1(TW2*,N)=0.0362 W1(TW2*,TW1*)=0.0113 eps=0.0056
+Escala teorica LPP: (L-4n)/(2^(4/3) n^(1/3)) -> TW2. DTW usa studentizacao independente do piloto.
+
+
+LPP expoente de flutuacao
+LPP  theta=0.3406  IC[0.3335, 0.3480]  decisao=FALHA  (KPZ 1/3, CLT 1/2)
+  par 64,128: chi=0.3488 IC[0.2632, 0.4260]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 128,256: chi=0.3354 IC[0.2602, 0.4364]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 256,512: chi=0.3457 IC[0.2686, 0.4335]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 512,1024: chi=0.3595 IC[0.2631, 0.4388]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 1024,2048: chi=0.3107 IC[0.2407, 0.3834]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 2048,4096: chi=0.3245 IC[0.2443, 0.4038]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 4096,8192: chi=0.3514 IC[0.2702, 0.4252]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 8192,16384: chi=0.3753 IC[0.2884, 0.4486]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  media ≈ 4.000229 * n + -4.699346 * n^(1/3) + 1.558909
+  variancia ≈ 6.123890 * n^(2/3) + -22.054239 * n^(1/3) + 90.983203
+  n=64  assim=0.288 IC[0.211, 0.386] alvo=0.224 delta=0.064 AD_sinal=1.497 p_sinal=0.6550 PASSA
+  controle Johansson n=64  mediaZ=-1.733 sdZ=0.871 AD=6.230 p=0.0050 AFASTA_TW_FINITO
+  n=128  assim=0.288 IC[0.186, 0.376] alvo=0.224 delta=0.063 AD_sinal=1.753 p_sinal=0.4800 PASSA
+  controle Johansson n=128  mediaZ=-1.751 sdZ=0.874 AD=3.146 p=0.0150 COMPATIVEL
+  n=256  assim=0.179 IC[0.090, 0.281] alvo=0.224 delta=-0.045 AD_sinal=1.356 p_sinal=0.5750 PASSA
+  controle Johansson n=256  mediaZ=-1.754 sdZ=0.876 AD=2.759 p=0.0500 COMPATIVEL
+  n=512  assim=0.223 IC[0.144, 0.306] alvo=0.224 delta=-0.001 AD_sinal=0.790 p_sinal=0.8100 PASSA
+  controle Johansson n=512  mediaZ=-1.768 sdZ=0.886 AD=0.671 p=0.5800 COMPATIVEL
+  n=1024  assim=0.248 IC[0.161, 0.346] alvo=0.224 delta=0.024 AD_sinal=5.837 p_sinal=0.1100 PASSA
+  controle Johansson n=1024  mediaZ=-1.771 sdZ=0.911 AD=0.447 p=0.7450 COMPATIVEL
+  n=2048  assim=0.228 IC[0.148, 0.320] alvo=0.224 delta=0.004 AD_sinal=0.376 p_sinal=0.9300 PASSA
+  controle Johansson n=2048  mediaZ=-1.759 sdZ=0.900 AD=0.612 p=0.6900 COMPATIVEL
+  n=4096  assim=0.214 IC[0.123, 0.289] alvo=0.224 delta=-0.010 AD_sinal=6.168 p_sinal=0.0700 PASSA
+  controle Johansson n=4096  mediaZ=-1.763 sdZ=0.913 AD=0.611 p=0.5600 COMPATIVEL
+  n=8192  assim=0.307 IC[0.224, 0.405] alvo=0.224 delta=0.083 AD_sinal=12.154 p_sinal=0.0100 PASSA
+  controle Johansson n=8192  mediaZ=-1.750 sdZ=0.905 AD=1.288 p=0.2300 COMPATIVEL
+  n=16384  assim=0.149 IC[0.049, 0.223] alvo=0.224 delta=-0.075 AD_sinal=3.068 p_sinal=0.2950 PASSA
+  controle Johansson n=16384  mediaZ=-1.780 sdZ=0.881 AD=0.808 p=0.4950 COMPATIVEL
+  geodesico theta=0.6819 IC[0.6778, 0.6862] decisao=FALHA (KPZ 2/3)
+  pertencimento KPZ (margem + expoentes): FORA
+
+LPP3 expoente de flutuacao
+LPP3  theta=0.3399  IC[0.3323, 0.3469]  decisao=PASSA  (KPZ 1/3, CLT 1/2)
+  par 64,128: chi=0.3423 IC[0.2589, 0.4251]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 128,256: chi=0.3476 IC[0.2687, 0.4259]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 256,512: chi=0.3718 IC[0.2903, 0.4447]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 512,1024: chi=0.3036 IC[0.2215, 0.3744]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 1024,2048: chi=0.3189 IC[0.2349, 0.4127]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 2048,4096: chi=0.3944 IC[0.3114, 0.4707]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 4096,8192: chi=0.3365 IC[0.2626, 0.4271]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 8192,16384: chi=0.2787 IC[0.1902, 0.3692]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  media ≈ 3.999931 * n + -4.411343 * n^(1/3) + 0.017339
+  variancia ≈ 4.564136 * n^(2/3) + 17.865996 * n^(1/3) + -92.042508
+  n=64  assim=0.272 IC[0.187, 0.355] alvo=0.224 delta=0.048 AD_sinal=0.909 p_sinal=0.7350 PASSA
+  n=128  assim=0.227 IC[0.145, 0.304] alvo=0.224 delta=0.003 AD_sinal=2.560 p_sinal=0.3100 PASSA
+  n=256  assim=0.245 IC[0.168, 0.326] alvo=0.224 delta=0.020 AD_sinal=2.990 p_sinal=0.2550 PASSA
+  n=512  assim=0.272 IC[0.167, 0.379] alvo=0.224 delta=0.048 AD_sinal=2.385 p_sinal=0.3750 PASSA
+  n=1024  assim=0.196 IC[0.115, 0.298] alvo=0.224 delta=-0.028 AD_sinal=5.354 p_sinal=0.1200 PASSA
+  n=2048  assim=0.199 IC[0.110, 0.290] alvo=0.224 delta=-0.025 AD_sinal=2.215 p_sinal=0.3900 PASSA
+  n=4096  assim=0.168 IC[0.062, 0.249] alvo=0.224 delta=-0.056 AD_sinal=7.303 p_sinal=0.0350 PASSA
+  n=8192  assim=0.233 IC[0.136, 0.321] alvo=0.224 delta=0.009 AD_sinal=1.413 p_sinal=0.5000 PASSA
+  n=16384  assim=0.237 IC[0.151, 0.338] alvo=0.224 delta=0.013 AD_sinal=0.377 p_sinal=0.9600 PASSA
+  geodesico theta=0.6775 IC[0.6733, 0.6811] decisao=FALHA (KPZ 2/3)
+  pertencimento KPZ (margem + expoentes): FORA
+
+FPP3 expoente de flutuacao
+FPP3  theta=0.2771  IC[0.2697, 0.2849]  decisao=FALHA  (KPZ 1/3, CLT 1/2)
+  par 64,128: chi=0.2142 IC[0.1308, 0.2879]; alvos 1/3=0.3333 e 1/2=0.5000; NENHUM
+  par 128,256: chi=0.2114 IC[0.1279, 0.2947]; alvos 1/3=0.3333 e 1/2=0.5000; NENHUM
+  par 256,512: chi=0.2881 IC[0.2016, 0.3640]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 512,1024: chi=0.2550 IC[0.1667, 0.3388]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 1024,2048: chi=0.2750 IC[0.1866, 0.3583]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 2048,4096: chi=0.3043 IC[0.2269, 0.3844]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 4096,8192: chi=0.3396 IC[0.2656, 0.4153]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 8192,16384: chi=0.3207 IC[0.2307, 0.3998]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  media ≈ 0.345427 * n + 0.823404 * n^(1/3) + 0.685274
+  variancia ≈ 0.166661 * n^(2/3) + -0.125224 * n^(1/3) + 3.210234
+  n=64  assim=0.425 IC[0.293, 0.546] alvo=-0.224 delta=0.649 AD_sinal=2.507 p_sinal=0.3350 FALHA
+  n=128  assim=0.132 IC[0.019, 0.233] alvo=-0.224 delta=0.356 AD_sinal=3.026 p_sinal=0.2750 PASSA
+  n=256  assim=0.005 IC[-0.083, 0.104] alvo=-0.224 delta=0.229 AD_sinal=14.061 p_sinal=0.0050 PASSA
+  n=512  assim=-0.097 IC[-0.195, -0.016] alvo=-0.224 delta=0.127 AD_sinal=13.077 p_sinal=0.0100 PASSA
+  n=1024  assim=-0.046 IC[-0.139, 0.056] alvo=-0.224 delta=0.178 AD_sinal=8.214 p_sinal=0.0600 PASSA
+  n=2048  assim=-0.190 IC[-0.289, -0.092] alvo=-0.224 delta=0.034 AD_sinal=18.048 p_sinal=0.0050 PASSA
+  n=4096  assim=-0.188 IC[-0.336, -0.071] alvo=-0.224 delta=0.036 AD_sinal=7.915 p_sinal=0.0450 PASSA
+  n=8192  assim=-0.213 IC[-0.301, -0.140] alvo=-0.224 delta=0.011 AD_sinal=10.266 p_sinal=0.0050 PASSA
+  n=16384  assim=-0.157 IC[-0.235, -0.075] alvo=-0.224 delta=0.067 AD_sinal=17.102 p_sinal=0.0150 PASSA
+  geodesico theta=0.6682 IC[0.6639, 0.6721] decisao=PASSA (KPZ 2/3)
+  pertencimento KPZ (margem + expoentes): FORA
+
+DTW expoente de flutuacao
+DTW  theta=0.4456  IC[0.4372, 0.4528]  decisao=FALHA  (KPZ 1/3, CLT 1/2)
+  par 64,128: chi=0.3793 IC[0.2773, 0.4611]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 128,256: chi=0.4095 IC[0.3204, 0.4979]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 256,512: chi=0.4024 IC[0.3163, 0.4903]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 512,1024: chi=0.5139 IC[0.4298, 0.5901]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_2
+  par 1024,2048: chi=0.3921 IC[0.3106, 0.4857]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_3
+  par 2048,4096: chi=0.4826 IC[0.4031, 0.5626]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_2
+  par 4096,8192: chi=0.4809 IC[0.4046, 0.5747]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_2
+  par 8192,16384: chi=0.4895 IC[0.4052, 0.5697]; alvos 1/3=0.3333 e 1/2=0.5000; COBRE_1_2
+  media ≈ 0.481212 * n + 1.125245 * n^(1/3) + 0.307810
+  variancia ≈ 7.292393 * n^(2/3) + -87.678720 * n^(1/3) + 304.679390
+  n=64  assim=0.391 IC[0.317, 0.502] alvo=-0.224 delta=0.616 AD_sinal=1.856 p_sinal=0.4250 FALHA
+  n=128  assim=0.264 IC[0.192, 0.351] alvo=-0.224 delta=0.488 AD_sinal=1.668 p_sinal=0.4800 PASSA
+  n=256  assim=0.212 IC[0.113, 0.302] alvo=-0.224 delta=0.436 AD_sinal=0.900 p_sinal=0.7200 PASSA
+  n=512  assim=0.045 IC[-0.032, 0.137] alvo=-0.224 delta=0.269 AD_sinal=2.617 p_sinal=0.3550 PASSA
+  n=1024  assim=0.037 IC[-0.034, 0.111] alvo=-0.224 delta=0.261 AD_sinal=2.931 p_sinal=0.3150 PASSA
+  n=2048  assim=0.017 IC[-0.065, 0.096] alvo=-0.224 delta=0.241 AD_sinal=3.779 p_sinal=0.2550 PASSA
+  n=4096  assim=0.061 IC[-0.041, 0.153] alvo=-0.224 delta=0.285 AD_sinal=2.207 p_sinal=0.4750 PASSA
+  n=8192  assim=0.019 IC[-0.077, 0.095] alvo=-0.224 delta=0.243 AD_sinal=2.729 p_sinal=0.3550 PASSA
+  n=16384  assim=-0.050 IC[-0.142, 0.017] alvo=-0.224 delta=0.174 AD_sinal=3.132 p_sinal=0.2800 PASSA
+  geodesico theta=0.6480 IC[0.6434, 0.6520] decisao=FALHA (KPZ 2/3)
+  residuo DTW 64->128: R2 piloto 0.5414 -> 0.5541; chi sd residual=0.4461 IC[0.3987, 0.4922], chi sd C=0.3571
+  residuo DTW 128->256: R2 piloto 0.5541 -> 0.5312; chi sd residual=0.3971 IC[0.3500, 0.4480], chi sd C=0.3661
+  R2 nao sobe com n e chi do residuo nao e menor que chi de C.
+  residuo DTW 256->512: R2 piloto 0.5312 -> 0.4879; chi sd residual=0.4616 IC[0.4010, 0.5144], chi sd C=0.3416
+  R2 nao sobe com n e chi do residuo nao e menor que chi de C.
+  residuo DTW 512->1024: R2 piloto 0.4879 -> 0.5326; chi sd residual=0.4319 IC[0.3801, 0.4846], chi sd C=0.5484
+  residuo DTW 1024->2048: R2 piloto 0.5326 -> 0.5392; chi sd residual=0.4499 IC[0.3995, 0.5008], chi sd C=0.4619
+  residuo DTW 2048->4096: R2 piloto 0.5392 -> 0.5367; chi sd residual=0.4699 IC[0.4247, 0.5209], chi sd C=0.4318
+  R2 nao sobe com n e chi do residuo nao e menor que chi de C.
+  residuo DTW 4096->8192: R2 piloto 0.5367 -> 0.5401; chi sd residual=0.4441 IC[0.3877, 0.4895], chi sd C=0.5029
+  residuo DTW 8192->16384: R2 piloto 0.5401 -> 0.5705; chi sd residual=0.4579 IC[0.4053, 0.5086], chi sd C=0.5337
+  pertencimento KPZ (margem + expoentes): FORA
+
+equivalencia DTW vs LPP
+  n=64  W1=0.0365  UCB=0.0771  eps=0.0056  NAO_EQUIVALENTE
+  n=128  W1=0.0464  UCB=0.0925  eps=0.0056  NAO_EQUIVALENTE
+  n=256  W1=0.0220  UCB=0.0677  eps=0.0056  NAO_EQUIVALENTE
+  n=512  W1=0.0410  UCB=0.0751  eps=0.0056  NAO_EQUIVALENTE
+  n=1024  W1=0.0740  UCB=0.1192  eps=0.0056  NAO_EQUIVALENTE
+  n=2048  W1=0.0347  UCB=0.0739  eps=0.0056  NAO_EQUIVALENTE
+  n=4096  W1=0.0565  UCB=0.1036  eps=0.0056  NAO_EQUIVALENTE
+  n=8192  W1=0.0681  UCB=0.1150  eps=0.0056  NAO_EQUIVALENTE
+  n=16384  W1=0.0455  UCB=0.0737  eps=0.0056  NAO_EQUIVALENTE
+  extrapolacao W1(inf)=0.0596 UCB=0.0841 eps=0.0056  NAO_EQUIVALENTE
+  (W1(inf) e o intercepto de W1(n)=W1(inf)+c n^(-1/3); UCB bootstrap percentil)
+
+equivalencia DTW vs FPP3
+  n=64  W1=0.0229  UCB=0.0697  eps=0.0056  NAO_EQUIVALENTE
+  n=128  W1=0.0338  UCB=0.0741  eps=0.0056  NAO_EQUIVALENTE
+  n=256  W1=0.0680  UCB=0.1040  eps=0.0056  NAO_EQUIVALENTE
+  n=512  W1=0.0489  UCB=0.0850  eps=0.0056  NAO_EQUIVALENTE
+  n=1024  W1=0.0676  UCB=0.1035  eps=0.0056  NAO_EQUIVALENTE
+  n=2048  W1=0.0567  UCB=0.0986  eps=0.0056  NAO_EQUIVALENTE
+  n=4096  W1=0.0368  UCB=0.0702  eps=0.0056  NAO_EQUIVALENTE
+  n=8192  W1=0.0416  UCB=0.0776  eps=0.0056  NAO_EQUIVALENTE
+  n=16384  W1=0.0583  UCB=0.1018  eps=0.0056  NAO_EQUIVALENTE
+  extrapolacao W1(inf)=0.0600 UCB=0.0836 eps=0.0056  NAO_EQUIVALENTE
+  (W1(inf) e o intercepto de W1(n)=W1(inf)+c n^(-1/3); UCB bootstrap percentil)
+
+equivalencia FPP3 vs LPP
+  n=64  W1=0.0485  UCB=0.0922  eps=0.0056  NAO_EQUIVALENTE
+  n=128  W1=0.0526  UCB=0.0942  eps=0.0056  NAO_EQUIVALENTE
+  n=256  W1=0.0570  UCB=0.0954  eps=0.0056  NAO_EQUIVALENTE
+  n=512  W1=0.0786  UCB=0.1131  eps=0.0056  NAO_EQUIVALENTE
+  n=1024  W1=0.0505  UCB=0.0792  eps=0.0056  NAO_EQUIVALENTE
+  n=2048  W1=0.0820  UCB=0.1191  eps=0.0056  NAO_EQUIVALENTE
+  n=4096  W1=0.0800  UCB=0.1258  eps=0.0056  NAO_EQUIVALENTE
+  n=8192  W1=0.0931  UCB=0.1321  eps=0.0056  NAO_EQUIVALENTE
+  n=16384  W1=0.0826  UCB=0.1174  eps=0.0056  NAO_EQUIVALENTE
+  extrapolacao W1(inf)=0.0920 UCB=0.1195 eps=0.0056  NAO_EQUIVALENTE
+  (W1(inf) e o intercepto de W1(n)=W1(inf)+c n^(-1/3); UCB bootstrap percentil)
