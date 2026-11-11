@@ -155,7 +155,8 @@ public final class MechanismStudy {
 
     private static void summarizeProbe(Config c,Path raw,boolean maximize) throws IOException {
         List<String> lines=Files.readAllLines(raw); List<String> out=new ArrayList<>();
-        out.add("phase,dist,n,measure,count,mean,sd,skewness,excess_kurtosis,w1_normal,w1_reflected_tw2");
+        String twColumn = maximize ? "w1_tw2" : "w1_reflected_tw2";
+        out.add("phase,dist,n,measure,count,mean,sd,skewness,excess_kurtosis,w1_normal," + twColumn);
         TracyWidom tw=TracyWidom.build();
         for(int n:c.ns) {
             List<String[]> pilotRows=rowsFor(lines,"pilot",c.dist,n);

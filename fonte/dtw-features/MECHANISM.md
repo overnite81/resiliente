@@ -31,7 +31,7 @@ A sonda máxima pode ser executada separadamente; usa arquivos e checkpoints pr�
 ./run-mechanism.sh --phase maxprobe --n 128,256,512 --replicates 2000 --pilot 1000 --seq-dist NORMAL
 ```
 
-As saídas são `max-probe-{normal,uniform}-raw.csv`, `max-probe-summary.csv`, `max-probe-scaling.csv` e `max-probe-association.csv`. As referências de forma do resumo usam TW2 não refletida, ao contrário da sonda mínima, mas isso é apenas uma comparação descritiva, não uma afirmação de lei limite.
+As saídas são `max-probe-{normal,uniform}-raw.csv`, `max-probe-summary.csv`, `max-probe-scaling.csv` e `max-probe-association.csv`. A última coluna de `max-probe-summary.csv` é `w1_tw2`: a referência de forma é a TW2 não refletida, ao contrário de `w1_reflected_tw2` na sonda mínima. Essa comparação é apenas descritiva, não uma afirmação de lei limite.
 
 ## Interpolação e testes de ordem
 
