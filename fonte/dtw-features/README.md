@@ -7,7 +7,8 @@ Modelos simulados:
 - **LPP**: última passagem clássica (passos direita/acima).
 - **LPP3**: última passagem com três vizinhos (direita, acima e diagonal).
 - **FPP3**: primeira passagem com diagonal (controle estrutural do DTW).
-- **DTW**: DTW quadrado clássico, custo `|Xi−Yj|` ou `(Xi−Yj)²`.
+- **DTW**: DTW quadrado de custo mínimo, custo local `|Xi−Yj|` ou `(Xi−Yj)²`.
+- **DTW_MAX**: DTW quadrado de custo máximo puro, com a mesma vizinhança e custo local do DTW mínimo.
 
 Pesos de LPP/LPP3/FPP3 e as sequências do DTW usam uma distribuição escolhida na linha de comando: `EXPONENTIAL` (Exp(1)), `NORMAL` (N(0,1)), `POISSON` (Poisson(1)) ou `UNIFORM` (Uniforme[0,1]). O padrão é pesos exponenciais e sequências normais.
 
@@ -20,7 +21,7 @@ cd fonte/dtw-features
 ./run.sh --check
 ```
 
-`run.sh` compila com javac 17 e executa. `--check` valida a tabela Tracy–Widom e uma fumaça dos núcleos (LPP, LPP3, FPP3 e DTW).
+`run.sh` compila com javac 17 e executa o estudo incluindo DTW mínimo e DTW_MAX. `--check` valida a tabela Tracy–Widom e uma fumaça dos núcleos (LPP, LPP3, FPP3, DTW mínimo e máximo). A rotina principal também grava comparações de equivalência entre DTW_MAX e LPP3/LPP.
 
 ## Execução
 
@@ -83,4 +84,4 @@ O bootstrap reamostra os vetores já studentizados (sem re-studentização), cor
 
 ## Dependências
 
-Java 17, sem bibliotecas externas. O estudo conclusivo está em `KpzEquivalenceStudy`; o alvo de DTW/FPP3 é `-TW2`.
+Java 17, sem bibliotecas externas. O estudo conclusivo está em `KpzEquivalenceStudy`; DTW mínimo/FPP3 são comparados com a TW2 refletida, enquanto DTW_MAX é reportado como distribuição de custo máximo e comparado também com LPP3.

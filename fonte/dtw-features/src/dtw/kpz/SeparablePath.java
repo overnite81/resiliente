@@ -23,10 +23,15 @@ final class SeparablePath {
 
     static Metrics dtw(double[] x, double[] y, double[] prev, double[] curr,
                        byte[] pred, boolean keepPath) {
+        return dtw(x, y, prev, curr, pred, false, keepPath);
+    }
+
+    static Metrics dtw(double[] x, double[] y, double[] prev, double[] curr,
+                       byte[] pred, boolean maximize, boolean keepPath) {
         int n = x.length;
         double diag = 0;
         for (int i = 0; i < n; i++) diag += Math.abs(x[i] - y[i]);
-        double value = DirectedPassage.dtw(n, x, y, prev, curr, pred, true);
+        double value = DirectedPassage.dtw(n, x, y, prev, curr, pred, true, maximize);
         return metrics(value, diag, pred, n, keepPath);
     }
 

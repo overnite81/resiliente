@@ -92,16 +92,21 @@ public final class KpzEquivalenceStudy {
                 n, reps, zMean, TracyWidom.TW2_MEAN_REF);
         Outcome dtw = DirectedPassage.simulate(Model.DTW, 32, cfg.seed, 0, true, Cost.ABS,
                 cfg.weightDist, cfg.seqDist);
+        Outcome dtwMax = DirectedPassage.simulate(Model.DTW_MAX, 32, cfg.seed, 0, true, Cost.ABS,
+                cfg.weightDist, cfg.seqDist);
         Outcome fpp = DirectedPassage.simulate(Model.FPP3, 32, cfg.seed, 0, true, Cost.ABS,
                 cfg.weightDist, cfg.seqDist);
         Outcome lpp3 = DirectedPassage.simulate(Model.LPP3, 32, cfg.seed, 0, true, Cost.ABS,
                 cfg.weightDist, cfg.seqDist);
-        System.out.printf(Locale.US, "fumaca DTW=%.6f mid=%d  FPP3=%.6f mid=%d  LPP3=%.6f mid=%d%n",
-                dtw.value, dtw.midColumn, fpp.value, fpp.midColumn, lpp3.value, lpp3.midColumn);
+        System.out.printf(Locale.US, "fumaca DTW-min=%.6f mid=%d  DTW-max=%.6f mid=%d  FPP3=%.6f mid=%d  LPP3=%.6f mid=%d%n",
+                dtw.value, dtw.midColumn, dtwMax.value, dtwMax.midColumn,
+                fpp.value, fpp.midColumn, lpp3.value, lpp3.midColumn);
         boolean ok = tw.reliable()
                 && Math.abs(inv - 1.95996398454) < 2e-4
                 && Double.isFinite(dtw.value)
                 && dtw.midColumn >= 0 && dtw.midColumn < 32
+                && Double.isFinite(dtwMax.value)
+                && dtwMax.midColumn >= 0 && dtwMax.midColumn < 32
                 && Double.isFinite(fpp.value)
                 && fpp.midColumn >= 0 && fpp.midColumn < 32
                 && Double.isFinite(lpp3.value)
@@ -156,6 +161,8 @@ public final class KpzEquivalenceStudy {
             }
             equivalence(Model.DTW, Model.LPP, data, cfg, epsilon, boot, rep);
             equivalence(Model.DTW, Model.FPP3, data, cfg, epsilon, boot, rep);
+            equivalence(Model.DTW_MAX, Model.LPP3, data, cfg, epsilon, boot, rep);
+            equivalence(Model.DTW_MAX, Model.LPP, data, cfg, epsilon, boot, rep);
             equivalence(Model.FPP3, Model.LPP, data, cfg, epsilon, boot, rep);
 
             String text = rep.text.toString();

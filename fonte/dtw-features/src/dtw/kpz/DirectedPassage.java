@@ -12,7 +12,8 @@ public final class DirectedPassage {
         LPP(0),
         LPP3(3),
         FPP3(1),
-        DTW(2);
+        DTW(2),
+        DTW_MAX(4);
 
         public final int id;
         Model(int id) { this.id = id; }
@@ -97,9 +98,11 @@ public final class DirectedPassage {
                 value = fpp3(n, rng, buf.prev, buf.curr, pred, weightDist);
                 break;
             case DTW:
+            case DTW_MAX:
                 fillSequence(buf.x, n, rng, seqDist);
                 fillSequence(buf.y, n, rng, seqDist);
-                value = dtw(n, buf.x, buf.y, buf.prev, buf.curr, pred, cost == Cost.ABS);
+                value = dtw(n, buf.x, buf.y, buf.prev, buf.curr, pred,
+                        cost == Cost.ABS, model == Model.DTW_MAX);
                 mX = mean(buf.x, n);
                 mY = mean(buf.y, n);
                 emparelhado = pairedAbsMean(buf.x, buf.y, n);
@@ -305,6 +308,15 @@ public final class DirectedPassage {
     /** DTW clássico quadrado. Custo |Xi−Yj| ou (Xi−Yj)², passos (1,0),(0,1),(1,1). */
     static double dtw(int n, double[] x, double[] y, double[] prev, double[] curr,
                        byte[] pred, boolean absCost) {
+        return dtw(n, x, y, prev, curr, pred, absCost, false);
+    }
+
+    /**
+     * DTW quadrado. {@code maximize=false} é o mínimo clássico;
+     * {@code maximize=true} é o custo máximo puro (mesma vizinhança, sem mistura de pesos).
+     */
+    static double dtw(int n, double[] x, double[] y, double[] prev, double[] curr,
+                       byte[] pred, boolean absCost, boolean maximize) {
         double acc = 0.0;
         double x0 = x[0];
         for (int j = 0; j < n; j++) {
@@ -332,13 +344,24 @@ public final class DirectedPassage {
                 double fromDiag = prev[j - 1];
                 double best = fromDiag;
                 byte which = 2;
-                if (fromLeft < best) {
-                    best = fromLeft;
-                    which = 0;
-                }
-                if (fromUp < best) {
-                    best = fromUp;
-                    which = 1;
+                if (maximize) {
+                    if (fromLeft > best) {
+                        best = fromLeft;
+                        which = 0;
+                    }
+                    if (fromUp > best) {
+                        best = fromUp;
+                        which = 1;
+                    }
+                } else {
+                    if (fromLeft < best) {
+                        best = fromLeft;
+                        which = 0;
+                    }
+                    if (fromUp < best) {
+                        best = fromUp;
+                        which = 1;
+                    }
                 }
                 double val = c + best;
                 curr[j] = val;

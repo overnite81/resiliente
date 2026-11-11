@@ -27,11 +27,14 @@ public final class MechanismStudy {
         switch (c.phase) {
             case "check": check(); break;
             case "reanalysis": reanalysis(c); break;
-            case "probe": probe(c); break;
+            case "probe": probe(c, false); break;
+            case "maxprobe": probe(c, true); break;
             case "interpolation": interpolation(c); break;
-            case "ranks": ranks(c); break;
-            case "permutations": permutations(c); break;
-            default: throw new IllegalArgumentException("phase: check|reanalysis|probe|interpolation|ranks|permutations");
+            case "ranks": ranks(c, false); break;
+            case "ranks-max": ranks(c, true); break;
+            case "permutations": permutations(c, false); break;
+            case "permutations-max": permutations(c, true); break;
+            default: throw new IllegalArgumentException("phase: check|reanalysis|probe|maxprobe|interpolation|ranks|ranks-max|permutations|permutations-max");
         }
     }
 
@@ -84,53 +87,59 @@ public final class MechanismStudy {
 
         SeparablePath.Metrics min1=SeparablePath.mixed(x,y,omega,1,new double[n],new double[n],null,true,false);
         close(min1.cost,m.cost,"interpolation lambda=1 minimum / DTW");
+        SeparablePath.Metrics max1=SeparablePath.mixed(x,y,omega,1,new double[n],new double[n],null,false,false);
+        double pureMax=DirectedPassage.dtw(n,x,y,new double[n],new double[n],null,true,true);
+        close(max1.cost,pureMax,"lambda=1 maximum == pure max DTW");
         System.out.println("CHECK_OK " + tw.diagnostic());
     }
 
-    private static void probe(Config c) throws Exception {
-        Path raw = c.out.resolve("probe-"+c.dist.name().toLowerCase(Locale.ROOT)+"-raw.csv");
+    private static void probe(Config c, boolean maximize) throws Exception {
+        String prefix = maximize ? "max-probe-" : "probe-";
+        Path raw = c.out.resolve(prefix+c.dist.name().toLowerCase(Locale.ROOT)+"-raw.csv");
         Set<String> done = completed(raw, c.signature());
         try (BufferedWriter w = Files.newBufferedWriter(raw, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
             if (Files.size(raw)==0) { w.write("#config="+c.signature()); w.newLine(); w.write(HEADER); w.newLine(); w.flush(); }
             for (int n : c.ns) {
-                runProbePhase(c,n,"pilot",c.pilot,0,done,w);
+                runProbePhase(c,n,"pilot",c.pilot,0,done,w,maximize);
                 w.flush();
                 // Ajuste independente lido do journal; evita recalcular o piloto ao retomar.
                 List<String> journal=Files.readAllLines(raw);
                 double[] px=column(journal,"pilot",n,7,c.dist), py=column(journal,"pilot",n,6,c.dist);
                 if(px.length!=c.pilot||py.length!=c.pilot)throw new IOException("piloto incompleto no journal para n="+n);
                 double[] ab=EmpiricalStats.wlsSlope(px,py,null);
-                runProbePhase(c,n,"eval",c.replicates,c.pilot,done,w,ab);
+                runProbePhase(c,n,"eval",c.replicates,c.pilot,done,w,ab,maximize);
                 w.flush();
             }
         }
-        summarizeProbe(c,raw);
+        summarizeProbe(c,raw,maximize);
     }
 
-    private static void runProbePhase(Config c,int n,String phase,int count,int offset,Set<String> done,BufferedWriter w) throws Exception {
-        runProbePhase(c,n,phase,count,offset,done,w,new double[]{0,0});
+    private static void runProbePhase(Config c,int n,String phase,int count,int offset,Set<String> done,BufferedWriter w,boolean maximize) throws Exception {
+        runProbePhase(c,n,phase,count,offset,done,w,new double[]{0,0},maximize);
     }
-    private static void runProbePhase(Config c,int n,String phase,int count,int offset,Set<String> done,BufferedWriter w,double[] ab) throws Exception {
+    private static void runProbePhase(Config c,int n,String phase,int count,int offset,Set<String> done,BufferedWriter w,double[] ab,boolean maximize) throws Exception {
         List<Integer> todo=new ArrayList<>();
         for(int z=0;z<count;z++){int r=offset+z; if(!done.contains(phase+"|"+c.dist+"|"+n+"|"+r)) todo.add(r);}
         Object lock=new Object(); AtomicInteger completed=new AtomicInteger();
         IntStream.range(0,todo.size()).parallel().forEach(ix->{
-            int r=todo.get(ix); Observation o=observe(c,n,r,phase.equals("eval"));
+            int r=todo.get(ix); Observation o=observe(c,n,r,phase.equals("eval"),maximize);
             double residual=phase.equals("pilot")?Double.NaN:o.opt-(ab[0]+ab[1]*o.diag);
-            String line=String.format(Locale.US,"%s,%s,%d,%d,%d,DTW,%.12g,%.12g,%.12g,%.12g,%.8g,%d,%.8g,%d,%.12g,%.12g,%.8g,%d", 
-                    phase,c.dist,n,r,c.seed,o.opt,o.diag,o.diag-o.opt,residual,o.rms,o.max,o.visits,o.mid,o.lpp3,o.fpp3,o.lpp3Rms,o.lpp3Max);
+            String line = String.format(Locale.US,
+                    "%s,%s,%d,%d,%d,%s,%.12g,%.12g,%.12g,%.12g,%.8g,%d,%.8g,%d,%.12g,%.12g,%.8g,%d",
+                    phase,c.dist,n,r,c.seed,maximize?"DTW_MAX":"DTW",o.opt,o.diag,o.diag-o.opt,residual,o.rms,o.max,o.visits,o.mid,o.lpp3,o.fpp3,o.lpp3Rms,o.lpp3Max);
             synchronized(lock){try{w.write(line);w.newLine();int q=completed.incrementAndGet();if(q%100==0)w.flush();}catch(IOException e){throw new RuntimeException(e);}}
         });
-        System.out.printf("probe %s %s n=%d: %d novos%n",phase,c.dist,n,todo.size());
+        System.out.printf("%s %s n=%d: %d novos%n",maximize?"maxprobe":"probe",phase,n,todo.size());
         // Existing records are read before run; update set so subsequent phase logic sees these.
         for(int r:todo) done.add(phase+"|"+c.dist+"|"+n+"|"+r);
     }
 
-    private static Observation observe(Config c,int n,int replicate,boolean path) {
-        Xoroshiro128 rng=new Xoroshiro128(Xoroshiro128.mix(c.seed,MODEL_DT,n,replicate));
+    private static Observation observe(Config c,int n,int replicate,boolean path,boolean maximize) {
+        int modelId=maximize?DirectedPassage.Model.DTW_MAX.id:MODEL_DT;
+        Xoroshiro128 rng=new Xoroshiro128(Xoroshiro128.mix(c.seed,modelId,n,replicate));
         double[] x=SeparablePath.sequence(n,rng,c.dist), y=SeparablePath.sequence(n,rng,c.dist);
         byte[] pred=path?new byte[n*n]:null;
-        SeparablePath.Metrics m=SeparablePath.dtw(x,y,new double[n],new double[n],pred,path);
+        SeparablePath.Metrics m=SeparablePath.dtw(x,y,new double[n],new double[n],pred,maximize,path);
         Xoroshiro128 lppRng=new Xoroshiro128(Xoroshiro128.mix(c.seed,DirectedPassage.Model.LPP3.id,n,replicate));
         byte[] lppPred=path?new byte[n*n]:null;
         double lpp3=DirectedPassage.lpp3(n,lppRng,new double[n],new double[n],lppPred,Distribution.EXPONENTIAL);
@@ -144,7 +153,7 @@ public final class MechanismStudy {
         Observation(double a,double b,double c,int d,double e,int f,double g,double h,double q,int z){opt=a;diag=b;rms=c;max=d;visits=e;mid=f;lpp3=g;fpp3=h;lpp3Rms=q;lpp3Max=z;}
     }
 
-    private static void summarizeProbe(Config c,Path raw) throws IOException {
+    private static void summarizeProbe(Config c,Path raw,boolean maximize) throws IOException {
         List<String> lines=Files.readAllLines(raw); List<String> out=new ArrayList<>();
         out.add("phase,dist,n,measure,count,mean,sd,skewness,excess_kurtosis,w1_normal,w1_reflected_tw2");
         TracyWidom tw=TracyWidom.build();
@@ -157,23 +166,24 @@ public final class MechanismStudy {
                     double[] v=columnRows(rows,col);
                     double[] ref=phase.equals("pilot")?new double[]{EmpiricalStats.mean(v),EmpiricalStats.sd(v)}:pilotReference(pilotRows,col);
                     if(col==9&&phase.equals("eval"))ref=pilotResidualReference(pilotRows);
-                    appendSummary(out,phase,c.dist,n,new String[]{"opt","diag","gain","residual"}[col-6],v,tw,ref[0],ref[1],true);
+                    appendSummary(out,phase,c.dist,n,new String[]{"opt","diag","gain","residual"}[col-6],v,tw,ref[0],ref[1],true,!maximize);
                 }
                 if(phase.equals("eval")&&!rows.isEmpty()) for(int col=10;col<=17;col++) {
                     double[] v=columnRows(rows,col);
                     String name=new String[]{"rms_offset","max_offset","mean_visits","mid_column","control_lpp3","control_fpp3","lpp3_rms_offset","lpp3_max_offset"}[col-10];
                     boolean distributional=col==14||col==15;
                     double[] ref=distributional?pilotReference(pilotRows,col):new double[]{EmpiricalStats.mean(v),EmpiricalStats.sd(v)};
-                    appendSummary(out,phase,c.dist,n,name,v,tw,ref[0],ref[1],distributional);
+                    appendSummary(out,phase,c.dist,n,name,v,tw,ref[0],ref[1],distributional,!maximize);
                 }
             }
         }
-        Files.write(c.out.resolve("probe-summary.csv"),out);
-        writeScaling(c,out);
-        writeAssociation(c,lines);
-        System.out.println("Resumo: "+c.out.resolve("probe-summary.csv"));
+        String prefix=maximize?"max-probe-":"probe-";
+        Files.write(c.out.resolve(prefix+"summary.csv"),out);
+        writeScaling(c,out,prefix);
+        writeAssociation(c,lines,prefix);
+        System.out.println("Resumo: "+c.out.resolve(prefix+"summary.csv"));
     }
-    private static void writeScaling(Config c,List<String> summary) throws IOException {
+    private static void writeScaling(Config c,List<String> summary,String prefix) throws IOException {
         List<String> rows=new ArrayList<>(); rows.add("dist,measure,n1,n2,sd1,sd2,chi_local,var_over_n");
         List<Integer> ns=Arrays.stream(c.ns).sorted().boxed().toList();
         for(String measure:new String[]{"opt","diag","gain","residual","control_lpp3","control_fpp3","lpp3_rms_offset","lpp3_max_offset"}) {
@@ -185,9 +195,9 @@ public final class MechanismStudy {
                 prior=n; previous=sd;
             }
         }
-        Files.write(c.out.resolve("probe-scaling.csv"),rows);
+        Files.write(c.out.resolve(prefix+"scaling.csv"),rows);
     }
-    private static void writeAssociation(Config c,List<String> lines) throws IOException {
+    private static void writeAssociation(Config c,List<String> lines,String prefix) throws IOException {
         List<String> out=new ArrayList<>();out.add("dist,n,pilot_r2,eval_corr_opt_diag,eval_r2_from_pilot,eval_var_over_n");
         for(int n:c.ns) {
             double[] px=column(lines,"pilot",n,7,c.dist),py=column(lines,"pilot",n,6,c.dist),ex=column(lines,"eval",n,7,c.dist),ey=column(lines,"eval",n,6,c.dist);
@@ -198,7 +208,7 @@ public final class MechanismStudy {
             for(int i=0;i<ex.length;i++){double dx=ex[i]-xm,dy=ey[i]-ym;cov+=dx*dy;vx+=dx*dx;vy+=dy*dy;double e=ey[i]-ab[0]-ab[1]*ex[i];evalSe+=e*e;evalSs+=dy*dy;}
             out.add(String.format(Locale.US,"%s,%d,%.10g,%.10g,%.10g,%.10g",c.dist,n,1-se/ss,cov/Math.sqrt(vx*vy),1-evalSe/evalSs,EmpiricalStats.variance(ey)/n));
         }
-        Files.write(c.out.resolve("probe-association.csv"),out);
+        Files.write(c.out.resolve(prefix+"association.csv"),out);
     }
     private static double[] column(List<String> lines,String phase,int n,int col,Distribution dist){
         List<Double> v=new ArrayList<>();for(String line:lines){if(line.startsWith("#")||line.startsWith("phase,"))continue;String[] p=line.split(",");if(p.length>col&&p[0].equals(phase)&&p[1].equals(dist.name())&&Integer.parseInt(p[2])==n)v.add(Double.parseDouble(p[col]));}
@@ -214,17 +224,17 @@ public final class MechanismStudy {
         double[] x=columnRows(rows,7),y=columnRows(rows,6),ab=EmpiricalStats.wlsSlope(x,y,null),r=new double[x.length];
         for(int i=0;i<r.length;i++)r[i]=y[i]-ab[0]-ab[1]*x[i];return new double[]{EmpiricalStats.mean(r),EmpiricalStats.sd(r)};
     }
-    private static void appendSummary(List<String> out,String phase,Distribution dist,int n,String name,double[] v,TracyWidom tw,double refMean,double refSd,boolean compare){
+    private static void appendSummary(List<String> out,String phase,Distribution dist,int n,String name,double[] v,TracyWidom tw,double refMean,double refSd,boolean compare,boolean reflected){
         if(v.length<2)return; double mean=EmpiricalStats.mean(v),sd=EmpiricalStats.sd(v);double wN=Double.NaN,wTw=Double.NaN;
         if(compare&&refSd>0&&Double.isFinite(refSd)){
             double[] z=new double[v.length];EmpiricalStats.studentize(v,z,refMean,refSd);Arrays.sort(z);
             wN=EmpiricalStats.wasserstein1Sorted(z,normalQuantiles(v.length));
-            wTw=EmpiricalStats.wasserstein1Sorted(z,twQuantiles(tw,v.length));
+            wTw=EmpiricalStats.wasserstein1Sorted(z,twQuantiles(tw,v.length,reflected));
         }
         out.add(String.format(Locale.US,"%s,%s,%d,%s,%d,%.10g,%.10g,%.10g,%.10g,%.10g,%.10g",phase,dist,n,name,v.length,mean,sd,EmpiricalStats.skewness(v),EmpiricalStats.excessKurtosis(v),wN,wTw));
     }
     private static double[] normalQuantiles(int n){double[] q=new double[n];for(int i=0;i<n;i++)q[i]=EmpiricalStats.normalQuantile((i+.5)/n);return q;}
-    private static double[] twQuantiles(TracyWidom tw,int n){double[] q=new double[n];for(int i=0;i<n;i++)q[i]=tw.quantile2ReflectedStudentized((i+.5)/n);return q;}
+    private static double[] twQuantiles(TracyWidom tw,int n,boolean reflected){double[] q=new double[n];for(int i=0;i<n;i++){double p=(i+.5)/n;q[i]=reflected?tw.quantile2ReflectedStudentized(p):tw.quantile2Studentized(p);}return q;}
 
     private static void interpolation(Config c) throws Exception {
         Path out=c.out.resolve("interpolation.csv");
@@ -250,32 +260,32 @@ public final class MechanismStudy {
         }
     }
 
-    private static void ranks(Config c) throws Exception {
-        Path out=c.out.resolve("ranks.csv");
+    private static void ranks(Config c,boolean maximize) throws Exception {
+        Path out=c.out.resolve(maximize?"ranks-max.csv":"ranks.csv");
         try(BufferedWriter w=Files.newBufferedWriter(out,StandardOpenOption.CREATE,StandardOpenOption.APPEND)){
-            if(Files.size(out)==0){w.write("dist,n,replicate,rank_dtw,raw_dtw,diag_rank");w.newLine();}
+            if(Files.size(out)==0){w.write(maximize?"dist,n,replicate,rank_dtw_max,raw_dtw_max,diag_rank":"dist,n,replicate,rank_dtw,raw_dtw,diag_rank");w.newLine();}
             for(int n:c.ns)for(int r=0;r<c.replicates;r++){
                 Xoroshiro128 rng=new Xoroshiro128(Xoroshiro128.mix(c.seed,MODEL_DT,n,r));
                 double[] x=SeparablePath.sequence(n,rng,c.dist),y=SeparablePath.sequence(n,rng,c.dist);
                 double[] rx=SeparablePath.ranks(x),ry=SeparablePath.ranks(y);double[][] a=new double[2][n];
-                double rank=DirectedPassage.dtw(n,rx,ry,a[0],a[1],null,true);
-                double raw=DirectedPassage.dtw(n,x,y,a[0],a[1],null,true),diag=0;
+                double rank=DirectedPassage.dtw(n,rx,ry,a[0],a[1],null,true,maximize);
+                double raw=DirectedPassage.dtw(n,x,y,a[0],a[1],null,true,maximize),diag=0;
                 for(int i=0;i<n;i++)diag+=Math.abs(rx[i]-ry[i]);
                 w.write(String.format(Locale.US,"%s,%d,%d,%.12g,%.12g,%.12g%n",c.dist,n,r,rank,raw,diag));
             }
         }
     }
 
-    private static void permutations(Config c) throws IOException {
-        Path out=c.out.resolve("permutations.csv");
+    private static void permutations(Config c,boolean maximize) throws IOException {
+        Path out=c.out.resolve(maximize?"permutations-max.csv":"permutations.csv");
         try(BufferedWriter w=Files.newBufferedWriter(out,StandardOpenOption.CREATE,StandardOpenOption.APPEND)){
-            if(Files.size(out)==0){w.write("n,replicate,dtw_perm,diagonal_perm");w.newLine();}
+            if(Files.size(out)==0){w.write(maximize?"n,replicate,dtw_max_perm,diagonal_perm":"n,replicate,dtw_perm,diagonal_perm");w.newLine();}
             for(int n:c.ns)for(int r=0;r<c.replicates;r++){
                 Xoroshiro128 rng=new Xoroshiro128(Xoroshiro128.mix(c.seed,MODEL_DT,n,r));
                 double[] x=new double[n],y=new double[n];for(int i=0;i<n;i++){x[i]=i;y[i]=i;}
                 shuffle(x,rng);shuffle(y,rng);double diag=0;
                 for(int i=0;i<n;i++)diag+=Math.abs(x[i]-y[i]);
-                double dtw=DirectedPassage.dtw(n,x,y,new double[n],new double[n],null,true);
+                double dtw=DirectedPassage.dtw(n,x,y,new double[n],new double[n],null,true,maximize);
                 w.write(String.format(Locale.US,"%d,%d,%.12g,%.12g%n",n,r,dtw,diag));
             }
         }
