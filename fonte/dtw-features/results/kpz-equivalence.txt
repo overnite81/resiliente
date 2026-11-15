@@ -1,5 +1,5 @@
 Teste de equivalencia DTW / LPP e pertencimento KPZ
-n=[64, 128, 256, 512, 1024]  eval=5000  pilot=2000  bootstrap=399  alpha=0.0100  custo=ABS  pesos=EXPONENTIAL  seq=UNIFORM  fios=4  tempo=973.9s
+n=[64, 128, 256, 512, 1024]  eval=5000  pilot=2000  bootstrap=399  alpha=0.0100  custo=ABS  pesos=EXPONENTIAL  seq=UNIFORM  fios=4  tempo=826.3s
 TW2 numerico media=-1.7711 var=0.8132 assim=0.2241 | W1(TW2*,N)=0.0362 W1(TW2*,TW1*)=0.0113 eps=0.0056
 Escala teorica LPP: (L-4n)/(2^(4/3) n^(1/3)) -> TW2. DTW usa studentizacao independente do piloto.
 
