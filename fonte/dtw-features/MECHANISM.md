@@ -46,6 +46,17 @@ A interpolação grava caminhos de custo mínimo e máximo, mistura de pesos exp
 
 `ranks` aplica ranks às sequências contínuas iid e usa custo absoluto das diferenças de rank normalizadas. `permutations` gera duas permutações independentes uniformes e usa seus valores inteiros como sequências DTW. As variantes `ranks-max` e `permutations-max` gravam saídas separadas `ranks-max.csv` e `permutations-max.csv` com custo máximo. Estes observáveis são testes do ambiente separável; não implementam a inversa Sakai–Inenaga nem demonstram Plancherel/TW2.
 
+## Fase 0: reanálise dos ensembles de ordem
+
+O script `analyze_order_ensembles.py` resume os CSVs `permutations.csv` e `ranks.csv`, agrupando por tamanho e calculando média, desvio-padrão, assimetria e ICs percentis bootstrap. Também estima expoentes globais e locais de `sd` versus `n`, com bootstrap sobre réplicas. O custo `dtw_perm` é dividido por `n-1` antes do cálculo; a diagonal de referência permanece na escala original.
+
+```bash
+python3 analyze_order_ensembles.py --bootstrap 4000 --confidence 0.95 \
+  --seed 20260325 --out results/mechanism/order-summary
+```
+
+Por padrão, os caminhos de entrada são `results/mechanism/permutations.csv` e `ranks.csv`. O script requer NumPy e grava `moments.csv` e `scaling.csv` no diretório escolhido. Os ICs bootstrap são descritivos para os ensembles registrados; não substituem a comparação com bandas empíricas dos controles no mesmo intervalo de tamanhos.
+
 ## Saídas e limitações estatísticas
 
-Todas as saídas novas ficam sob `results/mechanism/` (ou `--out`). `probe-summary.csv` traz estimativas pontuais, `probe-scaling.csv` inclinações locais e `probe-association.csv` regressão/associação; os equivalentes da sonda máxima usam prefixo `max-probe-`. Esta versão ainda não calcula intervalos bootstrap, gates inferenciais automáticos ou inclinações/assimetria/W1 resumidas para os arquivos de interpolação/ranks/permutação; esses CSVs são registros brutos para análise posterior. Portanto, não interpretar estimativas de fumaça ou sem IC como decisão de classe.
+Todas as saídas novas ficam sob `results/mechanism/` (ou `--out`). `probe-summary.csv` traz estimativas pontuais, `probe-scaling.csv` inclinações locais e `probe-association.csv` regressão/associação; os equivalentes da sonda máxima usam prefixo `max-probe-`. A Fase 0 adiciona ICs bootstrap e inclinações/assimetria para os ensembles de ranks/permutação, mas ainda não calcula gates inferenciais automáticos nem resolve uma banda de controle empírica. Não interpretar estimativas de fumaça ou sem IC como decisão de classe.
